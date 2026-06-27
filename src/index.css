@@ -344,7 +344,7 @@ main { position: relative; z-index: 2; }
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 100;
+  z-index: 99999;
   pointer-events: none;
   border-radius: 50%;
   translate: -50% -50%;
