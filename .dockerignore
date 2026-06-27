@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.gitignore
+v_2
+backend/__pycache__
+backend/embeddings_cache.pkl
+backend/metrics.json
+C:*
+d:*
+*.docx
+*.html
+*.md

@@ -1,0 +1,1943 @@
+<!DOCTYPE html>
+<html lang="en"><head><script id="aura-preview-performance-controller">
+(function() {
+if (window.__auraPreviewPerformanceController) return;
+const nativeRequestAnimationFrame = window.requestAnimationFrame
+? window.requestAnimationFrame.bind(window)
+: function(callback) { return window.setTimeout(function() { callback(Date.now()); }, 16); };
+const nativeCancelAnimationFrame = window.cancelAnimationFrame
+? window.cancelAnimationFrame.bind(window)
+: window.clearTimeout.bind(window);
+const nativeSetInterval = window.setInterval.bind(window);
+let paused = false;
+let nextFrameId = 1;
+const frameRecords = new Map();
+const pausedFrameCallbacks = new Map();
+const style = document.createElement('style');
+style.id = 'aura-preview-performance-style';
+style.textContent = [
+'html[data-aura-preview-paused="true"] *,',
+'html[data-aura-preview-paused="true"] *::before,',
+'html[data-aura-preview-paused="true"] *::after {',
+'  animation-play-state: paused !important;',
+'  transition-duration: 0s !important;',
+'  scroll-behavior: auto !important;',
+'}'
+].join('\n');
+document.head.appendChild(style);
+window.requestAnimationFrame = function(callback) {
+const frameId = nextFrameId++;
+if (paused) {
+pausedFrameCallbacks.set(frameId, callback);
+frameRecords.set(frameId, { paused: true });
+return frameId;
+}
+const nativeFrameId = nativeRequestAnimationFrame(function(timestamp) {
+frameRecords.delete(frameId);
+callback(timestamp);
+});
+frameRecords.set(frameId, { nativeFrameId: nativeFrameId });
+return frameId;
+};
+window.cancelAnimationFrame = function(frameId) {
+const record = frameRecords.get(frameId);
+pausedFrameCallbacks.delete(frameId);
+if (record && typeof record.nativeFrameId !== 'undefined') {
+nativeCancelAnimationFrame(record.nativeFrameId);
+}
+frameRecords.delete(frameId);
+};
+window.setInterval = function(callback, delay) {
+const args = Array.prototype.slice.call(arguments, 2);
+return nativeSetInterval(function() {
+if (paused) return;
+callback.apply(this, args);
+}, delay);
+};
+const flushPausedFrames = function() {
+const callbacks = Array.from(pausedFrameCallbacks.entries());
+pausedFrameCallbacks.clear();
+callbacks.forEach(function(entry) {
+const frameId = entry[0];
+const callback = entry[1];
+const nativeFrameId = nativeRequestAnimationFrame(function(timestamp) {
+frameRecords.delete(frameId);
+callback(timestamp);
+});
+frameRecords.set(frameId, { nativeFrameId: nativeFrameId });
+});
+};
+const setPaused = function(nextPaused) {
+const shouldPause = Boolean(nextPaused);
+if (paused === shouldPause) return;
+paused = shouldPause;
+document.documentElement.toggleAttribute('data-aura-preview-paused', paused);
+if (!paused) {
+flushPausedFrames();
+}
+};
+window.__auraPreviewPerformanceController = {
+setPaused: setPaused,
+get paused() {
+return paused;
+}
+};
+window.addEventListener('message', function(event) {
+if (event.source !== window.parent) return;
+if (!event.data || event.data.type !== 'aura-preview-performance-mode') return;
+setPaused(event.data.paused);
+});
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VESPER — Deep-Field Observatory</title>
+<meta name="description" content="A fictional deep-space observatory. Drift through the nebula.">
+<link rel="icon" href="data:,">
+<!-- Display: Syne (oversized headlines) · Body: Space Grotesk -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+VESPER — Deep-Field Observatory
+Palette: void #050507 · indigo #1B1438 · magenta #FF4D9D
+cyan #46E5FF · starlight #E8ECF5
+============================================================ */
+:root {
+--void:    #050507;
+--indigo:  #1B1438;
+--magenta: #FF4D9D;
+--cyan:    #46E5FF;
+--star:    #E8ECF5;
+--star-dim: rgba(232, 236, 245, 0.55);
+--font-display: 'Syne', sans-serif;
+--font-body: 'Space Grotesk', sans-serif;
+--font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scrollbar-width: thin; scrollbar-color: #2a2440 transparent; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+body {
+background: var(--void);
+color: var(--star);
+font-family: var(--font-body);
+font-weight: 300;
+overflow-x: hidden;
+-webkit-font-smoothing: antialiased;
+}
+body.loading { overflow: hidden; }
+body.has-cursor, body.has-cursor a, body.has-cursor button { cursor: none; }
+::selection { background: var(--magenta); color: var(--void); }
+.mono {
+font-family: var(--font-mono);
+font-size: 0.68rem;
+letter-spacing: 0.28em;
+text-transform: uppercase;
+color: var(--star-dim);
+}
+/* ---------- WebGL canvas ---------- */
+#webgl {
+position: fixed;
+inset: 0;
+width: 100%;
+height: 100%;
+z-index: 0;
+display: block;
+}
+main { position: relative; z-index: 2; }
+/* ---------- Loader ---------- */
+.loader {
+position: fixed;
+inset: 0;
+z-index: 90;
+background: var(--void);
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.loader-dot {
+width: 5px;
+height: 5px;
+border-radius: 50%;
+background: #fff;
+box-shadow:
+0 0 12px 2px rgba(232, 236, 245, 0.9),
+0 0 42px 8px rgba(70, 229, 255, 0.35),
+0 0 90px 20px rgba(255, 77, 157, 0.12);
+}
+.loader-count {
+position: absolute;
+bottom: 7vh;
+left: 6vw;
+font-size: 0.9rem;
+letter-spacing: 0.5em;
+color: var(--star);
+}
+.loader-label {
+position: absolute;
+bottom: 7vh;
+right: 6vw;
+}
+/* ---------- Header ---------- */
+.site-head {
+position: fixed;
+top: 0;
+left: 0;
+right: 0;
+z-index: 10;
+display: flex;
+align-items: baseline;
+justify-content: space-between;
+padding: 2rem 6vw;
+mix-blend-mode: difference;
+}
+.logo {
+font-family: var(--font-display);
+font-weight: 800;
+letter-spacing: 0.34em;
+font-size: 0.95rem;
+}
+/* ---------- Hero ---------- */
+.hero {
+position: relative;
+min-height: 100vh;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.hero-inner { text-align: center; padding: 0 4vw; }
+.hero-title {
+font-family: var(--font-display);
+font-weight: 800;
+/* Syne 800 is very wide (~1.2em/glyph) — size so VESPER fits one line.
+!important because SplitText resets white-space inline when it splits. */
+font-size: clamp(2.6rem, 10.5vw, 10rem);
+letter-spacing: 0.06em;
+white-space: nowrap !important;
+line-height: 0.95;
+color: var(--star);
+text-shadow: 0 0 70px rgba(70, 229, 255, 0.18);
+}
+/* SplitText chars animate transforms — keep them inline-block */
+.hero-title div { display: inline-block; }
+.hero-sub { margin-top: 2.2rem; }
+.scroll-cue {
+position: absolute;
+bottom: 5vh;
+left: 50%;
+transform: translateX(-50%);
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 1rem;
+font-size: 0.58rem;
+text-align: center;
+}
+.cue-line {
+width: 1px;
+height: 52px;
+background: linear-gradient(to bottom, var(--star-dim), transparent);
+transform-origin: top;
+animation: cue 2.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes cue {
+0%   { transform: scaleY(0); }
+45%  { transform: scaleY(1); transform-origin: top; }
+46%  { transform-origin: bottom; }
+100% { transform: scaleY(0); transform-origin: bottom; }
+}
+/* ---------- Arrival (pinned) ---------- */
+.arrival {
+min-height: 100vh;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+.arrival-line {
+font-family: var(--font-body);
+font-weight: 300;
+font-size: clamp(1.4rem, 3.4vw, 2.6rem);
+line-height: 1.5;
+text-align: center;
+max-width: 28ch;
+color: var(--star);
+}
+.arrival-line div { display: inline-block; }
+/* ---------- Content panels ---------- */
+.panel {
+position: relative;
+min-height: 100vh;
+display: flex;
+align-items: center;
+padding: 24vh 6vw;
+}
+.panel-inner {
+position: relative;
+z-index: 2;
+max-width: 760px;
+}
+.panel--right { justify-content: flex-end; }
+.panel--right .panel-inner { text-align: right; }
+.panel--center { justify-content: center; }
+.panel--center .panel-inner { text-align: center; }
+.panel-label {
+display: block;
+margin-bottom: 2.4rem;
+color: var(--cyan);
+opacity: 0.75;
+}
+.panel-title {
+font-family: var(--font-display);
+font-weight: 700;
+font-size: clamp(2.35rem, 5.05vw, 4.45rem);
+line-height: 1.04;
+letter-spacing: 0.005em;
+margin-bottom: 2.4rem;
+}
+.panel-body {
+font-size: clamp(1rem, 1.4vw, 1.15rem);
+line-height: 1.85;
+color: var(--star-dim);
+max-width: 46ch;
+}
+.panel--right .panel-body { margin-left: auto; }
+.panel--center .panel-body { margin-inline: auto; }
+/* Parallax star layers (DOM stars, JS-generated) */
+.parallax-field {
+position: absolute;
+inset: -10% 0;
+z-index: 1;
+pointer-events: none;
+}
+.p-layer { position: absolute; inset: 0; }
+.p-star {
+position: absolute;
+border-radius: 50%;
+background: var(--star);
+}
+.p-star--near {
+box-shadow: 0 0 8px 1px rgba(70, 229, 255, 0.5);
+}
+/* ---------- Footer ---------- */
+.footer {
+position: relative;
+min-height: 92vh;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+text-align: center;
+padding: 10vh 6vw;
+}
+.footer-kicker { margin-bottom: 2rem; }
+.footer-title {
+font-family: var(--font-display);
+font-weight: 800;
+font-size: clamp(3rem, 9vw, 8rem);
+letter-spacing: 0.02em;
+margin-bottom: 5rem;
+}
+.magnetic-wrap { padding: 2.5rem; display: inline-block; }
+.magnetic-btn {
+position: relative;
+font-family: var(--font-body);
+font-weight: 400;
+font-size: 0.95rem;
+letter-spacing: 0.12em;
+color: var(--star);
+background: transparent;
+border: 1px solid rgba(232, 236, 245, 0.25);
+border-radius: 999px;
+padding: 1.45rem 3.4rem;
+cursor: pointer;
+transition: border-color 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.magnetic-btn:hover {
+border-color: rgba(70, 229, 255, 0.7);
+box-shadow: 0 0 36px rgba(70, 229, 255, 0.18), inset 0 0 18px rgba(255, 77, 157, 0.08);
+}
+.magnetic-label { display: inline-block; }
+.footer-meta {
+position: absolute;
+bottom: 4vh;
+left: 50%;
+transform: translateX(-50%);
+font-size: 0.58rem;
+}
+/* ---------- Film grain ---------- */
+.grain {
+position: fixed;
+inset: -100%;
+z-index: 60;
+pointer-events: none;
+opacity: 0.07;
+mix-blend-mode: overlay;
+background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+animation: grain 0.9s steps(6) infinite;
+}
+@keyframes grain {
+0%   { transform: translate(0, 0); }
+20%  { transform: translate(-3%, 2%); }
+40%  { transform: translate(2%, -3%); }
+60%  { transform: translate(-2%, -2%); }
+80%  { transform: translate(3%, 3%); }
+100% { transform: translate(0, 0); }
+}
+/* ---------- Custom cursor ---------- */
+.cursor-dot,
+.cursor-tail {
+position: fixed;
+top: 0;
+left: 0;
+z-index: 100;
+pointer-events: none;
+border-radius: 50%;
+translate: -50% -50%;
+opacity: 0;
+}
+body.has-cursor .cursor-dot,
+body.has-cursor .cursor-tail { opacity: 1; }
+.cursor-dot {
+width: 6px;
+height: 6px;
+background: #fff;
+box-shadow: 0 0 10px 2px rgba(232, 236, 245, 0.7);
+}
+.cursor-tail {
+width: 34px;
+height: 34px;
+background: radial-gradient(circle, rgba(70, 229, 255, 0.16) 0%, rgba(255, 77, 157, 0.06) 45%, transparent 70%);
+border: 1px solid rgba(232, 236, 245, 0.14);
+transition: scale 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+body.cursor-hover .cursor-tail { scale: 1.9; }
+/* ---------- Velocity marquee ---------- */
+.marquee {
+position: relative;
+padding: 3.5vh 0;
+border-top: 1px solid rgba(232, 236, 245, 0.08);
+border-bottom: 1px solid rgba(232, 236, 245, 0.08);
+overflow: hidden;
+white-space: nowrap;
+}
+.marquee-track { display: inline-flex; will-change: transform; }
+.marquee-set {
+display: inline-flex;
+align-items: center;
+gap: 2.5vw;
+padding-right: 2.5vw;
+font-family: var(--font-display);
+font-weight: 700;
+font-size: clamp(1.4rem, 3vw, 2.6rem);
+letter-spacing: 0.04em;
+color: var(--star);
+text-transform: uppercase;
+}
+.marquee-set i {
+font-style: normal;
+font-size: 0.6em;
+color: var(--cyan);
+opacity: 0.8;
+}
+/* ---------- Stats readout ---------- */
+.stats {
+position: relative;
+padding: 22vh 6vw;
+}
+.stats-label { display: block; color: var(--cyan); opacity: 0.75; margin-bottom: 7vh; }
+.stats-grid {
+display: grid;
+grid-template-columns: repeat(4, 1fr);
+gap: 3vw;
+}
+.stat { border-top: 1px solid rgba(232, 236, 245, 0.14); padding-top: 1.6rem; }
+.stat-num {
+display: block;
+font-family: var(--font-display);
+font-weight: 700;
+font-size: clamp(2.05rem, 3.55vw, 3.85rem);
+line-height: 0.98;
+letter-spacing: -0.015em;
+color: var(--star);
+font-variant-numeric: tabular-nums;
+white-space: nowrap;
+text-shadow: 0 0 34px rgba(70, 229, 255, 0.14);
+}
+.stat-cap { display: block; margin-top: 1.2rem; text-transform: none; letter-spacing: 0.16em; }
+/* ---------- Panels with imagery ---------- */
+.panel-grid {
+position: relative;
+z-index: 2;
+width: 100%;
+display: grid;
+grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+align-items: center;
+gap: 6vw;
+}
+.panel-grid--solo { grid-template-columns: 1fr; }
+.panel--flip .panel-inner { order: 2; }
+.panel--flip .panel-figure { order: 1; }
+.panel-figure { position: relative; margin: 0; }
+/* clip-path image reveal wrapper */
+.img-mask { overflow: hidden; border-radius: 2px; }
+.img-plate {
+display: block;
+width: 100%;
+aspect-ratio: 1 / 1;
+object-fit: cover;
+transform-origin: center;
+filter: saturate(1.05) contrast(1.03);
+}
+.panel-figure figcaption {
+margin-top: 1.2rem;
+color: var(--star-dim);
+}
+/* ---------- Deep-field gallery (horizontal) ---------- */
+.gallery {
+position: relative;
+overflow: hidden;
+background: linear-gradient(180deg, transparent, rgba(27, 20, 56, 0.25), transparent);
+}
+.gallery-track {
+display: flex;
+align-items: center;
+gap: 4vw;
+height: 100vh;
+padding: 0 6vw;
+width: max-content;
+}
+.gallery-intro { min-width: 34vw; }
+.gallery-title {
+font-family: var(--font-display);
+font-weight: 800;
+font-size: clamp(2.6rem, 5.5vw, 5.2rem);
+line-height: 1.02;
+margin: 1.8rem 0;
+color: var(--star);
+}
+.gallery-hint { color: var(--star-dim); }
+.card {
+position: relative;
+width: clamp(280px, 30vw, 460px);
+flex-shrink: 0;
+margin: 0;
+}
+.card-img { overflow: hidden; border-radius: 2px; }
+.card-plate {
+display: block;
+width: 100%;
+aspect-ratio: 4 / 5;
+object-fit: cover;
+transform-origin: center;
+filter: saturate(1.08) contrast(1.04);
+will-change: transform;
+}
+.card figcaption {
+display: flex;
+justify-content: space-between;
+align-items: baseline;
+margin-top: 1.2rem;
+gap: 1rem;
+}
+.card-name {
+font-family: var(--font-display);
+font-weight: 700;
+font-size: 1.2rem;
+color: var(--star);
+}
+.card-meta { color: var(--cyan); opacity: 0.7; }
+/* ---------- Full-bleed expanse ---------- */
+.expanse {
+position: relative;
+height: 100vh;
+overflow: hidden;
+display: flex;
+align-items: flex-end;
+}
+.expanse-mask { position: absolute; inset: 0; overflow: hidden; }
+.expanse-img {
+position: absolute;
+inset: -8% 0;            /* overscan for parallax drift */
+background: url("https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/e806377b-3b3f-49ed-90ad-602a53ea86da_800w.png") center / cover no-repeat;
+will-change: transform;
+}
+.expanse::after {
+content: '';
+position: absolute;
+inset: 0;
+background: linear-gradient(180deg, rgba(5,5,7,0.55) 0%, transparent 35%, rgba(5,5,7,0.85) 100%);
+pointer-events: none;
+}
+.expanse-caption { position: relative; z-index: 2; padding: 0 6vw 12vh; }
+.expanse-title {
+font-family: var(--font-display);
+font-weight: 800;
+font-size: clamp(2.4rem, 6vw, 6rem);
+line-height: 1.02;
+color: var(--star);
+margin-bottom: 1.6rem;
+}
+.expanse-meta { color: var(--star-dim); }
+/* ---------- Transmission log ---------- */
+.log { position: relative; padding: 20vh 6vw; }
+.log-label { display: block; color: var(--cyan); opacity: 0.75; margin-bottom: 6vh; }
+.log-list { list-style: none; }
+.log-row {
+display: grid;
+grid-template-columns: 12rem 1fr 9rem;
+gap: 2vw;
+align-items: baseline;
+padding: 2.2rem 0;
+border-top: 1px solid rgba(232, 236, 245, 0.12);
+}
+.log-row:last-child { border-bottom: 1px solid rgba(232, 236, 245, 0.12); }
+.log-time { color: var(--star-dim); }
+.log-text {
+font-size: clamp(1.05rem, 1.8vw, 1.5rem);
+line-height: 1.5;
+color: var(--star);
+}
+.log-tag { text-align: right; color: var(--magenta); opacity: 0.8; }
+/* ---------- Scroll-progress meter ---------- */
+.progress {
+position: fixed;
+z-index: 40;
+left: 6vw;
+bottom: 3.5vh;
+display: flex;
+align-items: center;
+gap: 1rem;
+mix-blend-mode: difference;
+opacity: 0;
+}
+body.has-cursor .progress, body:not(.loading) .progress { opacity: 1; transition: opacity 1s ease; }
+.progress-track {
+position: relative;
+width: 22vw;
+max-width: 240px;
+height: 1px;
+background: rgba(232, 236, 245, 0.2);
+}
+.progress-fill {
+position: absolute;
+inset: 0;
+background: var(--star);
+transform: scaleX(0);
+transform-origin: left;
+}
+.progress-pct { color: var(--star); }
+/* ---------- Responsive ---------- */
+/* Stats go two-up earlier so the big numbers never collide */
+@media (max-width: 1024px) {
+.stats-grid { grid-template-columns: repeat(2, 1fr); gap: 7vh 4vw; }
+}
+@media (max-width: 768px) {
+.head-meta { display: none; }
+.panel { padding: 16vh 8vw; }
+.magnetic-btn { padding: 1.2rem 2.6rem; }
+.stats { padding: 14vh 8vw; }
+.panel-grid, .panel--flip .panel-inner, .panel--flip .panel-figure {
+grid-template-columns: 1fr;
+order: initial;
+}
+.panel-grid { gap: 5vh; }
+.panel-figure { order: 2; }
+.panel-inner { order: 1; }
+.gallery-intro { min-width: 72vw; }
+.card { width: 72vw; }
+.log-row { grid-template-columns: 1fr; gap: 0.6rem; }
+.log-tag { text-align: left; }
+.progress { display: none; }
+}
+/* Gallery fallback stack (mobile / reduced motion — no horizontal pin) */
+.gallery--stack { overflow: visible; }
+.gallery--stack .gallery-track {
+flex-direction: column;
+align-items: stretch;
+width: auto;
+height: auto;
+padding: 14vh 8vw;
+gap: 8vh;
+}
+.gallery--stack .gallery-intro { min-width: 0; }
+.gallery--stack .card { width: min(100%, 460px); }
+@media (max-width: 768px) {
+.gallery .gallery-track { /* mobile always stacks via JS class */ }
+}
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+.grain { animation: none; }
+.cue-line { animation: none; transform: scaleY(1); }
+.cursor-dot, .cursor-tail { display: none; }
+.marquee-track { transform: none !important; }
+.progress { display: none; }
+}
+</style>
+<!-- All libraries are vendored locally in /vendor — no CDN, no internet
+required. Three.js is imported directly by js/scene.js via a relative
+path, so no import map is needed (works in every ES-module browser). -->
+<script src="https://cdn.jsdelivr.net/npm/lenis@1/dist/lenis.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/SplitText.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script><!-- aura-ga4-start -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2M6V79H761"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-2M6V79H761');
+</script>
+<!-- aura-ga4-end -->
+</head>
+
+<body class="loading">
+
+  <!-- WebGL layer: starfield + nebula + focal star (fixed, behind everything) -->
+  <canvas id="webgl" aria-hidden="true"></canvas>
+
+  <!-- ======== 1. INTRO LOADER ======== -->
+  <div class="loader" aria-hidden="true">
+    <div class="loader-dot"></div>
+    <div class="loader-count mono">000</div>
+    <div class="loader-label mono">CALIBRATING OPTICS</div>
+  </div>
+
+  <header class="site-head">
+    <div class="logo">VESPER</div>
+    <div class="head-meta mono">DEEP-FIELD OBSERVATORY&nbsp;&nbsp;·&nbsp;&nbsp;EST. 2147</div>
+  </header>
+
+  <main>
+
+    <!-- ======== 2. HERO ======== -->
+    <section class="hero" id="hero">
+      <div class="hero-inner">
+        <h1 class="hero-title">VESPER</h1>
+        <p class="hero-sub mono">A LISTENING POST AT THE EDGE OF THE CARINA REACH</p>
+      </div>
+      <div class="scroll-cue mono">
+        <span>SCROLL TO BEGIN THE CROSSING</span>
+        <span class="cue-line"></span>
+      </div>
+    </section>
+
+    <!-- ======== VELOCITY MARQUEE ======== -->
+    <section class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <!-- two identical sets → seamless −50% loop; JS modulates speed
+             and direction from Lenis scroll velocity -->
+        <div class="marquee-set">
+          <span>CARINA REACH</span><i>✦</i><span>RA 10ʰ 45ᵐ</span><i>✦</i>
+          <span>DEC −59° 41′</span><i>✦</i><span>400 LIGHT-YEARS OUT</span><i>✦</i>
+          <span>DEEP FIELD ACTIVE</span><i>✦</i>
+        </div>
+        <div class="marquee-set">
+          <span>CARINA REACH</span><i>✦</i><span>RA 10ʰ 45ᵐ</span><i>✦</i>
+          <span>DEC −59° 41′</span><i>✦</i><span>400 LIGHT-YEARS OUT</span><i>✦</i>
+          <span>DEEP FIELD ACTIVE</span><i>✦</i>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 3. PINNED ARRIVAL ======== -->
+    <section class="arrival" id="arrival">
+      <p class="arrival-line">Four hundred light-years out,<br>the noise of home goes quiet.</p>
+    </section>
+
+    <!-- ======== STATS READOUT (counters) ======== -->
+    <section class="stats" id="readout">
+      <p class="stats-label mono">01 — BY THE NUMBERS</p>
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="stat-num" data-to="1100">0</span>
+          <span class="stat-cap mono">Cold mirror segments</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" data-to="240000">0</span>
+          <span class="stat-cap mono">Exposure hours logged</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" data-to="11483">0</span>
+          <span class="stat-cap mono">Galaxies in one frame</span>
+        </div>
+        <div class="stat">
+          <span class="stat-num" data-to="400" data-suffix=" LY">0</span>
+          <span class="stat-cap mono">Distance to the station</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 4. CONTENT PANELS (now with imagery) ======== -->
+    <section class="panel" id="instrument">
+      <div class="panel-grid">
+        <div class="panel-inner">
+          <span class="panel-label mono">02 — THE INSTRUMENT</span>
+          <h2 class="panel-title">A mirror the size<br>of a small sea</h2>
+          <p class="panel-body">
+            Eleven hundred cold hexagons, grown in orbit and folded open like a
+            night flower. Vesper does not take pictures. It holds its breath for
+            years at a time, and lets the ancient light walk in.
+          </p>
+        </div>
+        <figure class="panel-figure">
+          <div class="img-mask"><img class="img-plate" src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/3d72837c-6294-419d-877a-ba6ea4eb2a70_1600w.png" alt="The primary mirror array" loading="lazy"></div>
+          <figcaption class="mono">PRIMARY ARRAY · 1,100 SEGMENTS</figcaption>
+        </figure>
+      </div>
+      <div class="parallax-field" aria-hidden="true"></div>
+    </section>
+
+    <section class="panel panel--flip" id="deepfield">
+      <div class="panel-grid">
+        <div class="panel-inner">
+          <span class="panel-label mono">03 — THE DEEP FIELD</span>
+          <h2 class="panel-title">Stare at nothing.<br>It becomes everything.</h2>
+          <p class="panel-body">
+            The patch of sky we watch is smaller than a grain of sand held at
+            arm's length — and inside it, eleven thousand galaxies are burning
+            quietly. Emptiness, it turns out, was never the right word.
+          </p>
+        </div>
+        <figure class="panel-figure">
+          <div class="img-mask"><img class="img-plate" src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/d6260a51-f244-4eb9-98f5-8c08c05cbe58_1600w.png" alt="A deep-field exposure" loading="lazy"></div>
+          <figcaption class="mono">FIELD 9 · 52,000 LY DEEP</figcaption>
+        </figure>
+      </div>
+      <div class="parallax-field" aria-hidden="true"></div>
+    </section>
+
+    <!-- ======== DEEP-FIELD GALLERY (horizontal scroll) ======== -->
+    <section class="gallery" id="catalogue">
+      <div class="gallery-track">
+        <div class="gallery-intro">
+          <span class="mono panel-label">04 — THE CATALOGUE</span>
+          <h2 class="gallery-title">What the<br>silence holds</h2>
+          <p class="gallery-hint mono">SCROLL TO PAN →</p>
+        </div>
+
+        <figure class="card" data-hover="">
+          <div class="card-img"><img class="card-plate" src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/38c7b74f-eab0-4d72-bd1d-38f275610390_1600w.png" alt="The Loom" loading="lazy"></div>
+          <figcaption><span class="card-name">The Loom</span><span class="card-meta mono">VX-2291 · 1,344 LY</span></figcaption>
+        </figure>
+
+        <figure class="card" data-hover="">
+          <div class="card-img"><img class="card-plate" src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/7afbb74e-e716-4139-9356-09572511d3e9_1600w.png" alt="Pinwheel Deep" loading="lazy"></div>
+          <figcaption><span class="card-name">Pinwheel Deep</span><span class="card-meta mono">NGC-C7 · 21M LY</span></figcaption>
+        </figure>
+
+        <figure class="card" data-hover="">
+          <div class="card-img"><img class="card-plate" src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/4a72c12b-235b-4875-8cf0-128c0056eef2_1600w.png" alt="The Eye" loading="lazy"></div>
+          <figcaption><span class="card-name">The Eye</span><span class="card-meta mono">PN-7 · 655 LY</span></figcaption>
+        </figure>
+
+        <figure class="card" data-hover="">
+          <div class="card-img"><img class="card-plate" src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/02e44b57-332a-4e4c-96d3-cef8c655fee8_1600w.png" alt="Ember Cloud" loading="lazy"></div>
+          <figcaption><span class="card-name">Ember Cloud</span><span class="card-meta mono">CR-99 · 7,500 LY</span></figcaption>
+        </figure>
+
+        <figure class="card" data-hover="">
+          <div class="card-img"><img class="card-plate" src="https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/3d712e20-8e94-4d39-b838-3b29529a7db9_1600w.png" alt="The Halo" loading="lazy"></div>
+          <figcaption><span class="card-name">The Halo</span><span class="card-meta mono">SNR-V · 11,000 LY</span></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ======== FULL-BLEED EXPANSE REVEAL ======== -->
+    <section class="expanse" id="expanse">
+      <div class="expanse-mask"><div class="expanse-img"></div></div>
+      <div class="expanse-caption">
+        <h2 class="expanse-title">One frame.<br>Eleven thousand suns.</h2>
+        <p class="expanse-meta mono">FIELD 9 · CARINA REACH · 52,000 LY DEEP</p>
+      </div>
+    </section>
+
+    <!-- ======== SIGNALS PANEL ======== -->
+    <section class="panel panel--center" id="signals">
+      <div class="panel-grid panel-grid--solo">
+        <div class="panel-inner">
+          <span class="panel-label mono">05 — THE SIGNALS</span>
+          <h2 class="panel-title">The dark<br>is not silent</h2>
+          <p class="panel-body">
+            Pulsars keep time like lighthouses. Hydrogen hums at twenty-one
+            centimetres. And once a decade, something we cannot name repeats
+            itself — twice — and goes quiet. We log everything. We promise nothing.
+          </p>
+        </div>
+      </div>
+      <div class="parallax-field" aria-hidden="true"></div>
+    </section>
+
+    <!-- ======== TRANSMISSION LOG ======== -->
+    <section class="log" id="log">
+      <p class="log-label mono">06 — TRANSMISSIONS</p>
+      <ul class="log-list">
+        <li class="log-row">
+          <span class="log-time mono">2147.114 · 03:11</span>
+          <span class="log-text">Periodic source recovered at 21 cm. Two pulses, then silence.</span>
+          <span class="log-tag mono">UNRESOLVED</span>
+        </li>
+        <li class="log-row">
+          <span class="log-time mono">2147.109 · 22:48</span>
+          <span class="log-text">Gravitational lens confirmed behind Field 9. Eleven new galaxies.</span>
+          <span class="log-tag mono">CATALOGUED</span>
+        </li>
+        <li class="log-row">
+          <span class="log-time mono">2147.101 · 14:02</span>
+          <span class="log-text">Mirror reached thermal floor. Forty-eight micro-kelvin above zero.</span>
+          <span class="log-tag mono">NOMINAL</span>
+        </li>
+        <li class="log-row">
+          <span class="log-time mono">2147.094 · 06:37</span>
+          <span class="log-text">Carina drift compensated. Pointing error under one milliarcsecond.</span>
+          <span class="log-tag mono">NOMINAL</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ======== 5. FOOTER ======== -->
+    <footer class="footer" id="footer">
+      <p class="footer-kicker mono">THE CROSSING AWAITS</p>
+      <h2 class="footer-title">Leave the map.</h2>
+      <div class="magnetic-wrap">
+        <button class="magnetic-btn" type="button">
+          <span class="magnetic-label">Begin the journey</span>
+        </button>
+      </div>
+      <div class="footer-meta mono">VESPER OBSERVATORY © 2147 · A FICTION</div>
+    </footer>
+
+  </main>
+
+  <!-- Fixed scroll-progress meter -->
+  <div class="progress" aria-hidden="true">
+    <span class="progress-label mono">CROSSING</span>
+    <span class="progress-track"><span class="progress-fill"></span></span>
+    <span class="progress-pct mono">00</span>
+  </div>
+
+  <!-- Film grain + custom cursor -->
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor-dot" aria-hidden="true"></div>
+  <div class="cursor-tail" aria-hidden="true"></div>
+
+  <script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+
+/* ===== merged from js/scene.js ===== */
+/* ============================================================
+   VESPER — WebGL layer
+   One scene, three actors:
+
+   1. STARFIELD — a single THREE.Points cloud at multiple depths.
+      The "flying forward" trick lives in the vertex shader:
+        z = mod(z0 + uScroll, DEPTH) - DEPTH
+      Scrolling increases uScroll, every star slides toward the
+      camera and wraps back to the far plane — an infinite field
+      with zero per-frame CPU work. Perspective gives free
+      parallax: near stars sweep fast, far stars crawl.
+
+   2. NEBULA — one large plane at the back of the frustum running
+      a cheap fbm (fractal noise) fragment shader, blending the
+      magenta→cyan palette over a deep-indigo wash. Octave count
+      drops on mobile (see OCTAVES define).
+
+   3. FOCAL STAR — an additive radial-glow billboard with
+      diffraction spikes, used by the pinned "arrival" section.
+      main.js drives its intensity via setFocal(0..1).
+
+   Nothing here owns the clock or scroll: main.js calls render()
+   from the GSAP ticker (same rAF as Lenis) and feeds scroll
+   progress in — one source of truth for time and position.
+   ============================================================ */
+
+const DEPTH = 720;        // how deep the starfield extends behind the camera
+const SPREAD_X = 340;     // half-width of the field
+const SPREAD_Y = 220;     // half-height of the field
+
+function createScene({ canvas, config, isMobile, reduced }) {
+  const colorA = new THREE.Color(config.nebula.colorA); // magenta
+  const colorB = new THREE.Color(config.nebula.colorB); // cyan
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false,
+    powerPreference: 'high-performance',
+  });
+  renderer.setClearColor(0x050507, 1);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(
+    60, window.innerWidth / window.innerHeight, 0.1, 1500
+  );
+  camera.position.set(0, 0, 0);
+
+  /* Targets set from main.js; render() eases toward them every
+     frame so everything inherits the same weighted, drifting feel. */
+  const target = { scroll: 0, focal: 0, fov: 60, px: 0, py: 0 };
+  const current = { scroll: 0, focal: 0, fov: 60, px: 0, py: 0 };
+
+  /* ---------------- 1. Starfield ---------------- */
+
+  const starCount = isMobile ? config.stars.mobile : config.stars.desktop;
+  const positions = new Float32Array(starCount * 3);
+  const sizes = new Float32Array(starCount);
+  const shades = new Float32Array(starCount);  // 0..1 → magenta-ish .. cyan-ish tint
+  const phases = new Float32Array(starCount);  // twinkle offset
+
+  for (let i = 0; i < starCount; i++) {
+    positions[i * 3 + 0] = (Math.random() * 2 - 1) * SPREAD_X;
+    positions[i * 3 + 1] = (Math.random() * 2 - 1) * SPREAD_Y;
+    positions[i * 3 + 2] = Math.random() * DEPTH; // stored 0..DEPTH, shader maps to -DEPTH..0
+    // mostly faint stars, a few bright ones
+    sizes[i] = Math.random() < 0.06
+      ? 1.8 + Math.random() * 1.6
+      : 0.5 + Math.random() * 1.2;
+    shades[i] = Math.random();
+    phases[i] = Math.random();
+  }
+
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  starGeo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+  starGeo.setAttribute('aShade', new THREE.BufferAttribute(shades, 1));
+  starGeo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+
+  const starMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uScroll: { value: 0 },
+      uDepth: { value: DEPTH },
+      uPixelRatio: { value: renderer.getPixelRatio() },
+      uTintA: { value: colorA },
+      uTintB: { value: colorB },
+    },
+    vertexShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uScroll;
+      uniform float uDepth;
+      uniform float uPixelRatio;
+      uniform vec3 uTintA;
+      uniform vec3 uTintB;
+      attribute float aSize;
+      attribute float aShade;
+      attribute float aPhase;
+      varying float vAlpha;
+      varying vec3 vColor;
+
+      void main() {
+        vec3 pos = position;
+        // Infinite forward drift: wrap z through [-DEPTH, 0)
+        pos.z = mod(position.z + uScroll, uDepth) - uDepth;
+
+        vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+        float dist = -mv.z;
+
+        // Perspective point size (clamped so far stars stay visible)
+        gl_PointSize = max(aSize * uPixelRatio * (320.0 / dist), 1.0);
+
+        // Twinkle + fade in at the far plane, fade out passing the camera
+        float twinkle = 0.78 + 0.22 * sin(uTime * 1.6 + aPhase * 6.2831);
+        float farFade  = smoothstep(uDepth, uDepth - 180.0, dist);
+        float nearFade = smoothstep(2.0, 60.0, dist);
+        vAlpha = twinkle * farFade * nearFade;
+
+        // Pale starlight with a faint magenta/cyan cast per star
+        vec3 white = vec3(0.91, 0.93, 0.96);
+        vec3 tint = mix(uTintA, uTintB, step(0.5, aShade));
+        vColor = mix(white, tint, abs(aShade * 2.0 - 1.0) * 0.35);
+
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying float vAlpha;
+      varying vec3 vColor;
+
+      void main() {
+        // Soft round point: dim halo + hot core
+        float d = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.08, d) * 0.5 + smoothstep(0.16, 0.0, d);
+        gl_FragColor = vec4(vColor, a * vAlpha);
+      }
+    `,
+  });
+
+  const stars = new THREE.Points(starGeo, starMat);
+  stars.frustumCulled = false; // shader moves verts; bounding box is meaningless
+  scene.add(stars);
+
+  /* ---------------- 2. Nebula backdrop ---------------- */
+
+  const nebulaMat = new THREE.ShaderMaterial({
+    depthWrite: false,
+    defines: { OCTAVES: isMobile ? 3 : 5 },
+    uniforms: {
+      uTime: { value: 0 },
+      uScroll: { value: 0 },
+      uColorA: { value: colorA },
+      uColorB: { value: colorB },
+      uIntensity: { value: config.nebula.intensity },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uScroll;
+      uniform vec3 uColorA;
+      uniform vec3 uColorB;
+      uniform float uIntensity;
+
+      float hash(vec2 p) {
+        p = fract(p * vec2(234.34, 435.345));
+        p += dot(p, p + 34.23);
+        return fract(p.x * p.y);
+      }
+      float noise(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash(i),                 hash(i + vec2(1.0, 0.0)), f.x),
+          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
+      float fbm(vec2 p) {
+        float v = 0.0, amp = 0.5;
+        for (int i = 0; i < OCTAVES; i++) {
+          v += amp * noise(p);
+          p *= 2.03;
+          amp *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        // Domain-warped fbm: n1 distorts the lookup of n2 → wispy folds.
+        // uTime drifts the cloud, uScroll pushes it slowly as you travel.
+        vec2 p = vUv * 3.0 + vec2(uTime * 0.012, uTime * -0.008) + uScroll * 0.0008;
+        float n1 = fbm(p);
+        float n2 = fbm(p * 1.8 + n1 * 1.6 + vec2(4.7, 9.2));
+
+        vec3 nebula = mix(uColorA, uColorB, smoothstep(0.3, 0.8, n2));
+        float density = smoothstep(0.42, 0.95, (n1 + n2) * 0.55);
+        float mask = smoothstep(1.25, 0.25, length(vUv - 0.5) * 2.0); // vignette
+
+        vec3 col = vec3(0.02, 0.02, 0.028);              // void black base
+        col += vec3(0.106, 0.078, 0.22) * 0.5 * mask;    // deep indigo wash
+        col += nebula * density * mask * uIntensity;     // the cloud itself
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+
+  const nebula = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), nebulaMat);
+  nebula.position.z = -(DEPTH + 40);
+  nebula.renderOrder = -1;
+  scene.add(nebula);
+
+  // Scale the plane to cover the frustum at its depth (1.6x margin
+  // covers camera sway and the arrival fov change without rescaling).
+  function fitNebula() {
+    const dist = DEPTH + 40;
+    const h = 2 * Math.tan(THREE.MathUtils.degToRad(60) / 2) * dist * 1.6;
+    nebula.scale.set(h * camera.aspect, h, 1);
+  }
+
+  /* ---------------- 3. Focal star (arrival section) ---------------- */
+
+  const focalMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uFocal: { value: 0 },
+      uColorA: { value: colorA },
+      uColorB: { value: colorB },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uFocal;
+      uniform vec3 uColorA;
+      uniform vec3 uColorB;
+
+      void main() {
+        vec2 q = vUv - 0.5;
+        float d = length(q) * 2.0;
+        float pulse = 1.0 + 0.05 * sin(uTime * 1.4);
+
+        float core = smoothstep(0.16 * pulse, 0.0, d);     // white-hot center
+        float halo = pow(max(0.0, 1.0 - d), 2.6);          // soft falloff
+        float spikeH = pow(max(0.0, 1.0 - abs(q.y) * 26.0), 3.0) * pow(max(0.0, 1.0 - d), 1.4);
+        float spikeV = pow(max(0.0, 1.0 - abs(q.x) * 26.0), 3.0) * pow(max(0.0, 1.0 - d), 1.4) * 0.6;
+
+        vec3 col = mix(uColorB, vec3(1.0), core);
+        col += uColorA * halo * 0.45;
+
+        float a = (core * 1.2 + halo * 0.8 + (spikeH + spikeV) * 0.5) * uFocal;
+        gl_FragColor = vec4(col, a);
+      }
+    `,
+  });
+
+  const focal = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), focalMat);
+  focal.position.set(0, 3, -300);
+  focal.visible = false;
+  scene.add(focal);
+
+  /* ---------------- Resize / render ---------------- */
+
+  function resize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    starMat.uniforms.uPixelRatio.value = renderer.getPixelRatio();
+    fitNebula();
+  }
+  window.addEventListener('resize', resize);
+  fitNebula();
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  function render(time) {
+    // Ease current values toward targets — this is what makes the
+    // camera feel heavy and weightless at once.
+    current.scroll = lerp(current.scroll, target.scroll, 0.1);
+    current.focal = lerp(current.focal, target.focal, 0.09);
+    current.fov = lerp(current.fov, target.fov, 0.07);
+    current.px = lerp(current.px, target.px, 0.045);
+    current.py = lerp(current.py, target.py, 0.045);
+
+    const t = reduced ? 0 : time; // reduced motion: freeze the drift
+    starMat.uniforms.uTime.value = t;
+    starMat.uniforms.uScroll.value = current.scroll;
+    nebulaMat.uniforms.uTime.value = t;
+    nebulaMat.uniforms.uScroll.value = current.scroll;
+    focalMat.uniforms.uTime.value = t;
+    focalMat.uniforms.uFocal.value = current.focal;
+    focal.visible = current.focal > 0.01;
+    focal.scale.setScalar(0.55 + current.focal * 0.75);
+
+    if (!reduced) {
+      camera.position.x = current.px * 6;
+      camera.position.y = current.py * -3.5;
+      camera.lookAt(0, 0, -220);
+    }
+    if (Math.abs(current.fov - camera.fov) > 0.01) {
+      camera.fov = current.fov;
+      camera.updateProjectionMatrix();
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  return {
+    render,
+    /** scroll distance travelled into the field (world units) */
+    setScroll: (v) => { target.scroll = v; },
+    /** arrival glow intensity 0..1 */
+    setFocal: (v) => { target.focal = v; },
+    /** camera fov — narrowing it reads as "approaching" */
+    setFov: (v) => { target.fov = v; },
+    /** normalized pointer (-1..1) for subtle camera sway */
+    setPointer: (x, y) => { target.px = x; target.py = y; },
+  };
+}
+
+
+/* ===== merged from js/main.js ===== */
+/* ============================================================
+   VESPER — orchestration
+   Owns: Lenis↔ScrollTrigger sync, the intro loader, every GSAP
+   timeline, DOM parallax stars, the magnetic button, the cursor.
+   The WebGL scene (js/scene.js) is a dumb renderer — this file
+   feeds it scroll progress / focal intensity / fov.
+   ============================================================ */
+
+/* ====================== TUNING ======================
+   Everything you'd want to tweak lives here.            */
+const CONFIG = {
+  // --- Scroll weight: higher = heavier, more "drifting in vacuum".
+  //     1.0 feels normal, 2.2 feels syrupy. ---
+  scrollWeight: 1.7,
+
+  // --- Lenis easing curve (expo-style ease-out = weighted glide) ---
+  scrollEasing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+
+  // --- One easing personality for all GSAP reveals ---
+  ease: 'power3.out',      // standard reveals
+  easeLong: 'expo.out',    // hero / big headline reveals
+
+  // --- Particle counts (mobile heavily reduced) ---
+  stars: { desktop: 6000, mobile: 1400 },
+
+  // --- World units of forward travel over the full page scroll.
+  //     Raised for the longer page so the starfield keeps flowing. ---
+  travel: 1100,
+
+  // --- Nebula shader palette + strength (also tints stars/focal glow) ---
+  nebula: {
+    colorA: '#FF4D9D',   // magenta
+    colorB: '#46E5FF',   // cyan
+    intensity: 0.38,     // 0 = off, 0.6 = loud
+  },
+};
+/* ==================================================== */
+
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const IS_MOBILE =
+  window.matchMedia('(max-width: 768px)').matches ||
+  window.matchMedia('(pointer: coarse)').matches;
+
+gsap.registerPlugin(ScrollTrigger, SplitText);
+gsap.defaults({ ease: CONFIG.ease });
+
+window.__vesperBooted = true; // tells the inline fail-safe the scripts are alive
+
+/* ---------------- WebGL scene ---------------- */
+
+// Isolated: if WebGL is unavailable, the starfield is the centrepiece — but
+// the page (scroll, reveals) must still work, so fall back to a no-op stub.
+let sceneApi;
+try {
+  sceneApi = createScene({
+    canvas: document.getElementById('webgl'),
+    config: CONFIG,
+    isMobile: IS_MOBILE,
+    reduced: REDUCED,
+  });
+} catch (err) {
+  console.warn('[VESPER] WebGL unavailable — continuing without the starfield.', err);
+  document.getElementById('webgl').style.display = 'none';
+  sceneApi = { render() {}, setScroll() {}, setFocal() {}, setFov() {}, setPointer() {} };
+}
+
+/* ============================================================
+   LENIS ↔ SCROLLTRIGGER SYNC (the critical bit)
+
+   One scroll position, one clock:
+   - Lenis animates the *native* scroll position with a weighted
+     easing curve.
+   - Every time Lenis actually moves the page, it tells
+     ScrollTrigger to re-measure (`lenis.on('scroll', ScrollTrigger.update)`).
+   - Lenis's own rAF is never used; instead GSAP's ticker drives
+     `lenis.raf()`, so Lenis, every tween, and the WebGL render
+     all step inside the SAME requestAnimationFrame.
+   - lagSmoothing(0) stops GSAP from "catching up" after a janky
+     frame, which would cause a visible scroll jump.
+
+   With reduced motion we skip Lenis entirely — ScrollTrigger
+   falls back to native scroll and everything still works.
+   ============================================================ */
+
+let lenis = null;
+
+if (!REDUCED) {
+  lenis = new Lenis({
+    duration: CONFIG.scrollWeight,
+    easing: CONFIG.scrollEasing,
+    smoothWheel: true,
+  });
+
+  lenis.on('scroll', ScrollTrigger.update);
+
+  gsap.ticker.add((time) => {
+    lenis.raf(time * 1000); // GSAP time is seconds, Lenis wants ms
+  });
+
+  gsap.ticker.lagSmoothing(0);
+
+  lenis.stop(); // page is frozen until the loader finishes
+
+  window.__lenis = lenis; // debug handle (lets tooling drive the smooth scroll)
+}
+
+// The WebGL render also runs on the GSAP ticker → same frame as Lenis.
+gsap.ticker.add((time) => sceneApi.render(time));
+
+/* ---------------- Scroll → scene ----------------
+   Map total page progress (0..1) to forward travel in world
+   units. The scene lerps toward it, adding extra drift on top
+   of Lenis's own easing. */
+
+if (!REDUCED) {
+  ScrollTrigger.create({
+    start: 0,
+    end: () => ScrollTrigger.maxScroll(window),
+    onUpdate: (self) => sceneApi.setScroll(self.progress * CONFIG.travel),
+  });
+
+  // Subtle camera sway from the pointer (desktop only)
+  if (!IS_MOBILE) {
+    window.addEventListener('mousemove', (e) => {
+      sceneApi.setPointer(
+        (e.clientX / window.innerWidth) * 2 - 1,
+        (e.clientY / window.innerHeight) * 2 - 1
+      );
+    });
+  }
+}
+
+/* SplitText measures the DOM — wait for final font metrics before
+   splitting anything (top-level await; this is an ES module). The
+   loader overlay is plain black, so the beat of delay is invisible. */
+await document.fonts.ready;
+
+/* ============================================================
+   1. INTRO LOADER
+   Counter 000→100 over the void with a single point of light.
+   On completion the dot flares and expands "into" the starfield
+   (it scales up while the black overlay fades, revealing the
+   already-rendering WebGL field beneath), then the hero
+   headline assembles.
+   ============================================================ */
+
+const loaderEl = document.querySelector('.loader');
+const countEl = document.querySelector('.loader-count');
+
+// Pre-split the hero headline so chars exist (hidden) before reveal.
+const heroSplit = new SplitText('.hero-title', { type: 'chars' });
+gsap.set(heroSplit.chars, { autoAlpha: 0 });
+gsap.set(['.hero-sub', '.scroll-cue'], { autoAlpha: 0 });
+
+function revealHero() {
+  const tl = gsap.timeline();
+  if (REDUCED) {
+    tl.to(heroSplit.chars, { autoAlpha: 1, duration: 0.8 })
+      .to(['.hero-sub', '.scroll-cue'], { autoAlpha: 1, duration: 0.8 }, '<');
+    return tl;
+  }
+  // Constellation assembly: letters condense out of the dark in a
+  // random order — blur + scale collapsing into place.
+  tl.fromTo(
+    heroSplit.chars,
+    { autoAlpha: 0, scale: 1.55, filter: 'blur(14px)' },
+    {
+      autoAlpha: 1,
+      scale: 1,
+      filter: 'blur(0px)',
+      duration: 1.7,
+      ease: CONFIG.easeLong,
+      stagger: { each: 0.07, from: 'random' },
+    }
+  )
+    .to('.hero-sub', { autoAlpha: 1, duration: 1.2 }, '-=0.9')
+    .to('.scroll-cue', { autoAlpha: 1, duration: 1.2 }, '-=0.8');
+  return tl;
+}
+
+function runLoader() {
+  const done = () => {
+    loaderEl.style.display = 'none';
+    document.body.classList.remove('loading');
+    lenis?.start();
+    ScrollTrigger.refresh();
+  };
+
+  if (REDUCED) {
+    countEl.textContent = '100';
+    gsap.to(loaderEl, { autoAlpha: 0, duration: 0.5, onComplete: done });
+    revealHero();
+    return;
+  }
+
+  const counter = { v: 0 };
+  const tl = gsap.timeline();
+
+  tl
+    // count up while the lone point of light idles
+    .to(counter, {
+      v: 100,
+      duration: 2.2,
+      ease: 'power2.inOut',
+      onUpdate: () => {
+        countEl.textContent = String(Math.round(counter.v)).padStart(3, '0');
+      },
+    })
+    .to(['.loader-count', '.loader-label'], { autoAlpha: 0, duration: 0.5 })
+    // the point flares...
+    .to('.loader-dot', { scale: 2.4, duration: 0.55, ease: 'power3.in' }, '<')
+    // ...then expands into the starfield as the void overlay lifts
+    .to('.loader-dot', { scale: 40, autoAlpha: 0, duration: 1.5, ease: 'expo.inOut' })
+    .to(loaderEl, { autoAlpha: 0, duration: 1.1, ease: 'power2.out', onComplete: done }, '<40%')
+    .add(revealHero(), '-=1.0');
+}
+
+/* ============================================================
+   2. HERO — scrub the title away as you leave the section
+   ============================================================ */
+
+if (!REDUCED) {
+  gsap.to('.hero-inner', {
+    yPercent: -28,
+    autoAlpha: 0,
+    ease: 'none',
+    scrollTrigger: {
+      trigger: '.hero',
+      start: 'top top',
+      end: 'bottom top',
+      scrub: true,
+    },
+  });
+  gsap.to('.scroll-cue', {
+    autoAlpha: 0,
+    ease: 'none',
+    scrollTrigger: {
+      trigger: '.hero',
+      start: 'top top',
+      end: '40% top',
+      scrub: true,
+    },
+  });
+}
+
+/* ============================================================
+   3. PINNED ARRIVAL
+   The section pins for 160% of viewport height. While pinned
+   (scrubbed to scroll):
+     0.00–0.50  focal star fades in & swells, fov narrows
+                60→47 (narrowing fov = the approach)
+     0.25–0.65  the text line reveals word by word
+     0.65–0.80  hold — let it breathe
+     0.80–1.00  text drifts off, glow settles to an ember,
+                fov relaxes, scroll resumes naturally
+   ============================================================ */
+
+const arrivalSplit = new SplitText('.arrival-line', { type: 'words' });
+
+if (REDUCED) {
+  gsap.from(arrivalSplit.words, {
+    autoAlpha: 0,
+    duration: 0.8,
+    scrollTrigger: { trigger: '.arrival', start: 'top 60%' },
+    onStart: () => sceneApi.setFocal(0.55),
+  });
+} else {
+  const focal = { v: 0 };
+  const fov = { v: 60 };
+
+  gsap
+    .timeline({
+      defaults: { ease: 'none' },
+      scrollTrigger: {
+        trigger: '.arrival',
+        start: 'top top',
+        end: '+=160%',
+        pin: true,
+        scrub: true,
+        anticipatePin: 1,
+      },
+    })
+    .to(focal, { v: 1, duration: 0.5, onUpdate: () => sceneApi.setFocal(focal.v) }, 0)
+    .to(fov, { v: 47, duration: 0.5, onUpdate: () => sceneApi.setFov(fov.v) }, 0)
+    .fromTo(
+      arrivalSplit.words,
+      { autoAlpha: 0, y: 26, filter: 'blur(6px)' },
+      {
+        autoAlpha: 1, y: 0, filter: 'blur(0px)',
+        duration: 0.4, stagger: 0.05, ease: CONFIG.ease,
+      },
+      0.25
+    )
+    .to({}, { duration: 0.15 }) // hold
+    .to('.arrival-line', { autoAlpha: 0, y: -24, duration: 0.2 })
+    .to(focal, { v: 0.16, duration: 0.2, onUpdate: () => sceneApi.setFocal(focal.v) }, '<')
+    .to(fov, { v: 60, duration: 0.2, onUpdate: () => sceneApi.setFov(fov.v) }, '<');
+}
+
+/* ============================================================
+   4. CONTENT PANELS — reveals + DOM parallax depth
+   ============================================================ */
+
+document.querySelectorAll('.panel').forEach((panel) => {
+  const title = panel.querySelector('.panel-title');
+
+  const mask = panel.querySelector('.img-mask');
+  const plate = panel.querySelector('.img-plate');
+
+  if (REDUCED) {
+    gsap.from(panel.querySelectorAll('.panel-label, .panel-title, .panel-body, .panel-figure'), {
+      autoAlpha: 0,
+      duration: 0.8,
+      stagger: 0.15,
+      scrollTrigger: { trigger: panel, start: 'top 65%' },
+    });
+    return;
+  }
+
+  // Masked line reveal: SplitText wraps each line in a clipping
+  // wrapper (mask:'lines'), lines slide up out of the mask.
+  const split = new SplitText(title, { type: 'lines', mask: 'lines' });
+  gsap.from(split.lines, {
+    yPercent: 115,
+    duration: 1.5,
+    ease: CONFIG.easeLong,
+    stagger: 0.1,
+    scrollTrigger: { trigger: panel, start: 'top 68%' },
+  });
+
+  gsap.from(panel.querySelectorAll('.panel-label, .panel-body'), {
+    autoAlpha: 0,
+    y: 34,
+    duration: 1.4,
+    stagger: 0.15,
+    scrollTrigger: { trigger: panel, start: 'top 62%' },
+  });
+
+  // Image plate: clip-path wipe up while the photo settles 1.3 → 1.
+  if (mask && plate) {
+    gsap.timeline({ scrollTrigger: { trigger: panel, start: 'top 72%' } })
+      .fromTo(mask,
+        { clipPath: 'inset(0% 0% 100% 0%)' },
+        { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.7, ease: CONFIG.easeLong })
+      .fromTo(plate, { scale: 1.3 }, { scale: 1, duration: 2.0, ease: CONFIG.easeLong }, 0);
+    gsap.from(panel.querySelector('figcaption'), {
+      autoAlpha: 0, y: 18, duration: 1.1,
+      scrollTrigger: { trigger: panel, start: 'top 58%' },
+    });
+  }
+});
+
+/* ---------------- DOM parallax star layers ----------------
+   Three layers per panel at different "depths". Each layer is
+   scrubbed over a different y-distance while the panel crosses
+   the viewport — foreground stars (bigger, glowing) travel ~3x
+   farther than background ones. Combined with the WebGL field
+   this is what sells real depth. */
+
+if (!REDUCED) {
+  // [depth, star count] — depth 3 = foreground (fast, bright)
+  const LAYERS = IS_MOBILE
+    ? [[1, 4], [2, 4], [3, 3]]
+    : [[1, 9], [2, 8], [3, 6]];
+
+  document.querySelectorAll('.parallax-field').forEach((field) => {
+    LAYERS.forEach(([depth, count]) => {
+      const layer = document.createElement('div');
+      layer.className = 'p-layer';
+
+      for (let i = 0; i < count; i++) {
+        const s = document.createElement('span');
+        const size = depth === 3 ? 2.5 + Math.random() * 1.5 : depth * 0.8 + Math.random();
+        s.className = 'p-star' + (depth === 3 ? ' p-star--near' : '');
+        s.style.cssText = `
+          left:${Math.random() * 100}%;
+          top:${Math.random() * 100}%;
+          width:${size}px; height:${size}px;
+          opacity:${0.25 + (depth / 3) * 0.6};
+        `;
+        layer.appendChild(s);
+      }
+      field.appendChild(layer);
+
+      gsap.fromTo(
+        layer,
+        { y: depth * 70 },
+        {
+          y: -depth * 150, // foreground travels farthest = moves fastest
+          ease: 'none',
+          scrollTrigger: {
+            trigger: field.closest('.panel'),
+            start: 'top bottom',
+            end: 'bottom top',
+            scrub: true,
+          },
+        }
+      );
+    });
+  });
+}
+
+/* ============================================================
+   VELOCITY MARQUEE
+   A base loop drifts the ticker slowly (−50% = one full set, so
+   the seam is invisible). Every Lenis scroll event slams the
+   loop's timeScale to a velocity-scaled boost (and flips its
+   sign with scroll direction), then eases back to a gentle idle
+   drift — so the ticker "reacts" to how hard you scroll.
+   ============================================================ */
+
+if (!REDUCED) {
+  const marqTrack = document.querySelector('.marquee-track');
+  if (marqTrack && lenis) {
+    const loop = gsap.to(marqTrack, {
+      xPercent: -50, repeat: -1, duration: 26, ease: 'none',
+    });
+    lenis.on('scroll', ({ velocity = 0 }) => {
+      const dir = velocity >= 0 ? 1 : -1;
+      const boost = dir * (1 + Math.min(Math.abs(velocity) * 0.5, 7));
+      loop.timeScale(boost);                                   // snap to scroll speed
+      gsap.to(loop, { timeScale: dir, duration: 1.0, ease: 'power2.out', overwrite: true }); // ease back to idle drift
+    });
+  }
+}
+
+/* ============================================================
+   STATS READOUT — numbers count up once, on enter
+   ============================================================ */
+
+gsap.utils.toArray('.stat-num').forEach((el) => {
+  const to = parseFloat(el.dataset.to);
+  const suffix = (el.dataset.suffix || '').replace(/\s/g, '\u00A0');
+const fmt = (n) => Math.round(n).toLocaleString('en-US') + suffix;
+
+  if (REDUCED) { el.textContent = fmt(to); return; }
+
+  const obj = { v: 0 };
+  ScrollTrigger.create({
+    trigger: el, start: 'top 88%', once: true,
+    onEnter: () => gsap.to(obj, {
+      v: to, duration: 2.2, ease: 'power3.out',
+      onUpdate: () => { el.textContent = fmt(obj.v); },
+    }),
+  });
+});
+
+gsap.from('.stats-label', {
+  autoAlpha: 0, y: 20, duration: 1,
+  scrollTrigger: { trigger: '.stats', start: 'top 78%' },
+});
+gsap.from('.stats .stat', {
+  autoAlpha: 0, y: 30, duration: REDUCED ? 0.6 : 1.2, stagger: 0.1,
+  scrollTrigger: { trigger: '.stats', start: 'top 72%' },
+});
+
+/* ============================================================
+   DEEP-FIELD GALLERY — horizontal scroll (the signature moment)
+   The track is wider than the viewport; ScrollTrigger pins the
+   section and scrubs the track's x from 0 to −(trackWidth −
+   viewport), turning vertical scroll into a sideways pan. On
+   mobile / reduced motion it falls back to a vertical stack.
+   ============================================================ */
+
+const gallery = document.querySelector('.gallery');
+const galleryTrack = document.querySelector('.gallery-track');
+
+if (gallery && galleryTrack) {
+  if (REDUCED || IS_MOBILE) {
+    gallery.classList.add('gallery--stack');
+    gsap.utils.toArray('.gallery-intro, .gallery .card').forEach((el) => {
+      gsap.from(el, {
+        autoAlpha: 0, y: REDUCED ? 0 : 50, duration: REDUCED ? 0.6 : 1.3,
+        scrollTrigger: { trigger: el, start: 'top 84%' },
+      });
+    });
+  } else {
+    const dist = () => galleryTrack.scrollWidth - window.innerWidth;
+    gsap.to(galleryTrack, {
+      x: () => -dist(),
+      ease: 'none',
+      scrollTrigger: {
+        trigger: gallery,
+        start: 'top top',
+        end: () => '+=' + dist(),
+        pin: true, scrub: true, anticipatePin: 1, invalidateOnRefresh: true,
+      },
+    });
+    gsap.from('.gallery-intro > *', {
+      autoAlpha: 0, y: 40, duration: 1.3, stagger: 0.12,
+      scrollTrigger: { trigger: gallery, start: 'top 70%' },
+    });
+  }
+}
+
+/* ============================================================
+   FULL-BLEED EXPANSE — clip-path reveal + parallax + caption
+   ============================================================ */
+
+{
+  const expTitle = document.querySelector('.expanse-title');
+  const expSplit = new SplitText(expTitle, { type: 'lines', mask: 'lines' });
+
+  if (REDUCED) {
+    gsap.set('.expanse-mask', { clearProps: 'clipPath' });
+  } else {
+    gsap.timeline({ scrollTrigger: { trigger: '.expanse', start: 'top 78%' } })
+      .fromTo('.expanse-mask',
+        { clipPath: 'inset(0% 0% 100% 0%)' },
+        { clipPath: 'inset(0% 0% 0% 0%)', duration: 1.8, ease: CONFIG.easeLong })
+      .from(expSplit.lines, { yPercent: 115, duration: 1.4, stagger: 0.12, ease: CONFIG.easeLong }, '-=0.9')
+      .from('.expanse-meta', { autoAlpha: 0, y: 18, duration: 1 }, '-=0.6');
+
+    // slow vertical parallax of the image within its overscan
+    gsap.fromTo('.expanse-img',
+      { yPercent: -6 },
+      { yPercent: 6, ease: 'none',
+        scrollTrigger: { trigger: '.expanse', start: 'top bottom', end: 'bottom top', scrub: true } });
+  }
+}
+
+/* ============================================================
+   TRANSMISSION LOG — rows reveal as they enter
+   ============================================================ */
+
+gsap.from('.log-label', {
+  autoAlpha: 0, y: 20, duration: 1,
+  scrollTrigger: { trigger: '.log', start: 'top 78%' },
+});
+gsap.utils.toArray('.log-row').forEach((row) => {
+  gsap.from(row, {
+    autoAlpha: 0, y: 24, duration: REDUCED ? 0.5 : 1.1,
+    scrollTrigger: { trigger: row, start: 'top 90%' },
+  });
+});
+
+/* ============================================================
+   SCROLL-VELOCITY SKEW — images lean into fast scrolling.
+   ScrollTrigger.getVelocity() is fed through a clamp into a
+   weighted quickTo, so the skew snaps on and eases off.
+   ============================================================ */
+
+if (!REDUCED && !IS_MOBILE) {
+  const setters = gsap.utils.toArray('.card-plate, .img-plate, .expanse-img')
+    .map((el) => gsap.quickTo(el, 'skewY', { duration: 0.5, ease: 'power3' }));
+  const clamp = gsap.utils.clamp(-6, 6);
+  ScrollTrigger.create({
+    onUpdate: (self) => {
+      const s = clamp(self.getVelocity() / -380);
+      setters.forEach((set) => set(s));
+    },
+  });
+}
+
+/* ============================================================
+   SCROLL-PROGRESS METER — fixed hairline + percent readout
+   ============================================================ */
+
+{
+  const fill = document.querySelector('.progress-fill');
+  const pct = document.querySelector('.progress-pct');
+  const meter = document.querySelector('.progress');
+  if (fill && pct) {
+    ScrollTrigger.create({
+      start: 0, end: () => ScrollTrigger.maxScroll(window),
+      onUpdate: (self) => {
+        gsap.set(fill, { scaleX: self.progress });
+        pct.textContent = String(Math.round(self.progress * 100)).padStart(2, '0');
+      },
+    });
+    // fade the meter out over the footer so it never collides with the credit line
+    if (meter) {
+      ScrollTrigger.create({
+        trigger: '.footer', start: 'top 60%', end: 'top top',
+        onUpdate: (self) => gsap.set(meter, { autoAlpha: 1 - self.progress }),
+      });
+    }
+  }
+}
+
+/* ============================================================
+   5. FOOTER — magnetic button
+   The button is pulled toward the cursor inside a padded
+   hitbox; the label moves a touch less for a layered feel.
+   ============================================================ */
+
+const wrap = document.querySelector('.magnetic-wrap');
+const btn = document.querySelector('.magnetic-btn');
+
+if (!REDUCED && !IS_MOBILE) {
+  const xTo = gsap.quickTo(btn, 'x', { duration: 0.7, ease: CONFIG.ease });
+  const yTo = gsap.quickTo(btn, 'y', { duration: 0.7, ease: CONFIG.ease });
+  const lxTo = gsap.quickTo('.magnetic-label', 'x', { duration: 0.7, ease: CONFIG.ease });
+  const lyTo = gsap.quickTo('.magnetic-label', 'y', { duration: 0.7, ease: CONFIG.ease });
+
+  wrap.addEventListener('mousemove', (e) => {
+    const r = wrap.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2);
+    const dy = e.clientY - (r.top + r.height / 2);
+    xTo(dx * 0.4); yTo(dy * 0.4);
+    lxTo(dx * 0.12); lyTo(dy * 0.12);
+  });
+
+  wrap.addEventListener('mouseleave', () => {
+    xTo(0); yTo(0); lxTo(0); lyTo(0);
+  });
+}
+
+// "Begin the journey" → glide back to the top of the crossing
+btn.addEventListener('click', () => {
+  if (lenis) lenis.scrollTo(0, { duration: 3, easing: CONFIG.scrollEasing });
+  else window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// Footer text reveal
+gsap.from(['.footer-kicker', '.footer-title', '.magnetic-wrap'], {
+  autoAlpha: 0,
+  y: REDUCED ? 0 : 40,
+  duration: REDUCED ? 0.8 : 1.5,
+  stagger: 0.12,
+  scrollTrigger: { trigger: '.footer', start: 'top 65%' },
+});
+
+/* ============================================================
+   CUSTOM CURSOR — glowing dot + lagging tail
+   Two quickTo pairs at different durations: the dot is tight,
+   the tail drags behind on the same weighted ease.
+   ============================================================ */
+
+if (window.matchMedia('(pointer: fine)').matches && !REDUCED) {
+  document.body.classList.add('has-cursor');
+
+  const dotX = gsap.quickTo('.cursor-dot', 'x', { duration: 0.16, ease: CONFIG.ease });
+  const dotY = gsap.quickTo('.cursor-dot', 'y', { duration: 0.16, ease: CONFIG.ease });
+  const tailX = gsap.quickTo('.cursor-tail', 'x', { duration: 0.65, ease: CONFIG.ease });
+  const tailY = gsap.quickTo('.cursor-tail', 'y', { duration: 0.65, ease: CONFIG.ease });
+
+  window.addEventListener('mousemove', (e) => {
+    dotX(e.clientX); dotY(e.clientY);
+    tailX(e.clientX); tailY(e.clientY);
+  });
+
+  // tail swells over interactive elements
+  document.querySelectorAll('a, button').forEach((el) => {
+    el.addEventListener('mouseenter', () => document.body.classList.add('cursor-hover'));
+    el.addEventListener('mouseleave', () => document.body.classList.remove('cursor-hover'));
+  });
+}
+
+/* ---------------- Kickoff ---------------- */
+
+runLoader();
+
+</script>
+
+  <!-- Fail-safe: if main.js never boots (blocked script, file moved, etc.),
+       main.js sets window.__vesperBooted; if it's still unset after 6s we
+       lift the loader and unlock scrolling so the page is never trapped. -->
+  <script>
+    setTimeout(function () {
+      if (!window.__vesperBooted) {
+        document.body.classList.remove('loading');
+        var l = document.querySelector('.loader');
+        if (l) l.style.display = 'none';
+        console.warn('[VESPER] scripts did not boot — revealed page via fail-safe.');
+      }
+    }, 6000);
+  </script>
+
+
+</body></html>  
