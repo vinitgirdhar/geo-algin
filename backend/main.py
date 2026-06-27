@@ -116,6 +116,12 @@ class SearchResult(BaseModel):
     category: str  # "agri", "barrenland", "grassland", "urban"
     modality: str  # "s1" or "s2"
     is_exact_match: bool
+    match_gradcam: Optional[str] = None
+    change_map: Optional[str] = None
+    uncertainty_map: Optional[str] = None
+    confidence_score: Optional[float] = None
+    uncertainty_score: Optional[float] = None
+    reliability: Optional[str] = None
 
 class RetrieveResponse(BaseModel):
     query_image: str
@@ -124,6 +130,8 @@ class RetrieveResponse(BaseModel):
     results: List[SearchResult]
     latency_ms: float
     metrics: dict
+    query_gradcam: Optional[str] = None
+    query_uncertainty_map: Optional[str] = None
 
 # Categories definition
 CATEGORIES = ["agri", "barrenland", "grassland", "urban"]
@@ -209,6 +217,8 @@ def retrieve_images(payload: RetrieveRequest):
         }
 
     results = []
+    query_gradcam_base64 = None
+    query_uncertainty_base64 = None
     
     # If the real search index is available, perform real search!
     if index is not None:
@@ -221,12 +231,15 @@ def retrieve_images(payload: RetrieveRequest):
             if idx is None:
                 idx, found_mod = index.find_image_by_path(abs_s2_path)
                 
+            query_local_path = None
             if idx is not None:
                 # Query vector is pre-calculated
                 if payload.query_modality == "s1":
                     q_feat = index.s1_features[idx]
+                    query_local_path = abs_s1_path if os.path.exists(abs_s1_path) else abs_s2_path
                 else:
                     q_feat = index.s2_features[idx]
+                    query_local_path = abs_s2_path if os.path.exists(abs_s2_path) else abs_s1_path
             else:
                 # Extract features for new image using ResNet18
                 from preprocess import preprocess_s1, preprocess_s2
@@ -239,6 +252,7 @@ def retrieve_images(payload: RetrieveRequest):
                 if not os.path.exists(local_path):
                     raise FileNotFoundError(f"Query image file not found at {local_path}")
                     
+                query_local_path = local_path
                 if payload.query_modality == "s1":
                     img_np = preprocess_s1(local_path)
                 else:
@@ -257,18 +271,109 @@ def retrieve_images(payload: RetrieveRequest):
                 top_k=10
             )
             
+            # --- EXPLAINABILITY ENGINE CALCULATIONS ---
+            from explainability import (
+                GradCAM,
+                overlay_heatmap_on_image,
+                compute_mc_dropout_uncertainty,
+                generate_spatial_uncertainty_heatmap,
+                generate_semantic_change_map,
+                image_to_base64
+            )
+            from preprocess import preprocess_s1, preprocess_s2
+            
+            # Initialize Grad-CAM Hook Extractor
+            gradcam_extractor = GradCAM(resnet_model, resnet_model.layer4)
+            
+            # 1. Query Grad-CAM Heatmap
+            if query_local_path and os.path.exists(query_local_path):
+                if payload.query_modality == "s1":
+                    q_img_np = preprocess_s1(query_local_path)
+                else:
+                    q_img_np = preprocess_s2(query_local_path)
+                q_x = torch.from_numpy(q_img_np).permute(2, 0, 1).unsqueeze(0)
+                q_cam = gradcam_extractor.generate_heatmap(q_x, q_feat)
+                q_gradcam_img = overlay_heatmap_on_image(query_local_path, q_cam)
+                query_gradcam_base64 = image_to_base64(q_gradcam_img)
+            
+            # 2. Query MC Dropout Uncertainty and Uncertainty Spatial Heatmap
+            uncertainty_score = 0.05
+            if query_local_path and os.path.exists(query_local_path):
+                if hasattr(index, 'alignment_model') and index.alignment_model is not None:
+                    try:
+                        uncertainty_score, channel_weights = compute_mc_dropout_uncertainty(index.alignment_model, q_feat)
+                        u_img = generate_spatial_uncertainty_heatmap(query_local_path, resnet_model, channel_weights)
+                        query_uncertainty_base64 = image_to_base64(u_img)
+                    except Exception as e_mc:
+                        print(f"Failed to compute MC Dropout uncertainty: {e_mc}")
+            
+            # 3. Process Search Results
             for res in search_results:
+                res_relative = res["image_path"]
+                if res_relative.startswith("v_2/"):
+                    res_relative = res_relative[4:]
+                res_local_path = os.path.join(DATASET_DIR, res_relative)
+                
+                match_gradcam_b64 = None
+                change_map_b64 = None
+                u_map_b64 = None
+                
+                if os.path.exists(res_local_path):
+                    # Match Grad-CAM
+                    if res["modality"] == "s1":
+                        m_img_np = preprocess_s1(res_local_path)
+                    else:
+                        m_img_np = preprocess_s2(res_local_path)
+                    m_x = torch.from_numpy(m_img_np).permute(2, 0, 1).unsqueeze(0)
+                    m_cam = gradcam_extractor.generate_heatmap(m_x, q_feat)
+                    m_gradcam_img = overlay_heatmap_on_image(res_local_path, m_cam)
+                    match_gradcam_b64 = image_to_base64(m_gradcam_img)
+                    
+                    # Semantic Change detection
+                    if query_local_path and os.path.exists(query_local_path):
+                        c_img = generate_semantic_change_map(query_local_path, res_local_path)
+                        change_map_b64 = image_to_base64(c_img)
+                        
+                    # Spatial Uncertainty Map for match
+                    if 'channel_weights' in locals():
+                        mu_img = generate_spatial_uncertainty_heatmap(res_local_path, resnet_model, channel_weights)
+                        u_map_b64 = image_to_base64(mu_img)
+                
+                # Calibrated confidence score
+                sim = res["similarity"]
+                conf_score = 1.0 / (1.0 + np.exp(-12.0 * (sim - 0.75)))
+                conf_score = float(np.clip(conf_score, 0.05, 0.99))
+                
+                # Match specific uncertainty
+                m_uncertainty = float(np.clip(uncertainty_score + (1.0 - sim) * 0.4, 0.02, 0.98))
+                rel_label = "HIGH" if m_uncertainty < 0.25 else ("MEDIUM" if m_uncertainty < 0.55 else "LOW")
+                
                 results.append(SearchResult(
                     image_path=res["image_path"],
                     filename=res["filename"],
                     similarity=res["similarity"],
                     category=res["category"],
                     modality=res["modality"],
-                    is_exact_match=res["is_exact_match"]
+                    is_exact_match=res["is_exact_match"],
+                    match_gradcam=match_gradcam_b64,
+                    change_map=change_map_b64,
+                    uncertainty_map=u_map_b64,
+                    confidence_score=conf_score,
+                    uncertainty_score=m_uncertainty,
+                    reliability=rel_label
                 ))
+            
+            # Clean up hook handles
+            gradcam_extractor.remove_hooks()
                 
         except Exception as e:
             print(f"Error during real index search: {e}. Falling back to mock retrieval.")
+            # Ensure hooks are removed in case of crash
+            if 'gradcam_extractor' in locals():
+                try:
+                    gradcam_extractor.remove_hooks()
+                except:
+                    pass
             results = []
             
     # Mock fallback if results list is empty (e.g. cache still training)
@@ -359,7 +464,9 @@ def retrieve_images(payload: RetrieveRequest):
         target_modality=target_mod,
         results=results,
         latency_ms=latency_ms,
-        metrics=metrics
+        metrics=metrics,
+        query_gradcam=query_gradcam_base64,
+        query_uncertainty_map=query_uncertainty_base64
     )
 
 @app.get("/api/metrics")

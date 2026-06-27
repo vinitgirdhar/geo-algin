@@ -81,6 +81,9 @@ export default function App() {
   const [isConsoleExpanded, setIsConsoleExpanded] = useState(false);
   const [systemMetrics, setSystemMetrics] = useState(null);
   const [hoveredMetric, setHoveredMetric] = useState(null);
+  const [queryGradcam, setQueryGradcam] = useState(null);
+  const [queryUncertaintyMap, setQueryUncertaintyMap] = useState(null);
+  const [inspectTab, setInspectTab] = useState("swipe");
   const [activeSection, setActiveSection] = useState("hero");
 
   // Scroll-based section tracking for dynamic nav highlighting
@@ -160,6 +163,8 @@ export default function App() {
   const triggerRetrieval = async () => {
     setIsSearching(true);
     setSearchResults([]);
+    setQueryGradcam(null);
+    setQueryUncertaintyMap(null);
     
     const API_BASE = `http://${window.location.hostname}:8000`;
     const queryImagePath = queryModality === "s1" ? selectedPair.s1 : selectedPair.s2;
@@ -177,6 +182,8 @@ export default function App() {
       setSearchResults(data.results);
       setSearchLatency(data.latency_ms);
       setSearchMetrics(data.metrics);
+      setQueryGradcam(data.query_gradcam);
+      setQueryUncertaintyMap(data.query_uncertainty_map);
     } catch (err) {
       console.error("Retrieval fetch failed, simulating fallback...", err);
       await new Promise(resolve => setTimeout(resolve, 800));
@@ -1501,18 +1508,36 @@ export default function App() {
                             <span className={`result-badge ${res.is_exact_match ? 'exact' : ''}`}>
                               {res.is_exact_match ? 'Geographic Match' : 'Semantic Match'}
                             </span>
+                            {res.reliability && (
+                              <span 
+                                className={`result-badge`} 
+                                style={{ 
+                                  background: res.reliability === 'HIGH' ? 'rgba(70, 229, 255, 0.12)' : (res.reliability === 'MEDIUM' ? 'rgba(255, 235, 59, 0.1)' : 'rgba(255, 77, 157, 0.12)'), 
+                                  border: res.reliability === 'HIGH' ? '1px solid var(--cyan)' : (res.reliability === 'MEDIUM' ? '1px solid #ffeb3b' : '1px solid var(--magenta)'), 
+                                  color: res.reliability === 'HIGH' ? 'var(--cyan)' : (res.reliability === 'MEDIUM' ? '#ffeb3b' : 'var(--magenta)')
+                                }}
+                              >
+                                {res.reliability} RELIABILITY
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="result-action">
-                          <div className={`result-match-pct ${res.similarity > 0.9 ? 'high' : 'mid'}`} style={{ marginBottom: "0.4rem" }}>
-                            {(res.similarity * 100).toFixed(1)}%
+                          <div className={`result-match-pct ${res.similarity > 0.9 ? 'high' : 'mid'}`} style={{ fontSize: "1rem", whiteSpace: "nowrap" }}>
+                            {(res.similarity * 100).toFixed(1)}% Sim
                           </div>
+                          {res.confidence_score !== undefined && (
+                            <div style={{ fontSize: "0.65rem", color: "var(--star-dim)", margin: "0.15rem 0 0.4rem" }}>
+                              {Math.round(res.confidence_score * 100)}% Confidence
+                            </div>
+                          )}
                           <button
                             className="btn-inspect"
                             onClick={() => {
                               setActiveInspect(res);
                               setIsCompareOpen(true);
                               setSliderPosition(50);
+                              setInspectTab("swipe");
                             }}
                           >
                             INSPECT
@@ -1767,68 +1792,194 @@ export default function App() {
               <button className="btn-close" onClick={() => setIsCompareOpen(false)}>×</button>
             </div>
             <div className="compare-body">
-              {/* Disaster Assessment Toolbar */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem", padding: "0 0.5rem" }}>
-                <span className="mono" style={{ fontSize: "0.75rem", color: "var(--star-dim)" }}>DISASTER WORKSPACE</span>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.8rem" }}>
-                  <input 
-                    type="checkbox" 
-                    checked={showWaterMask}
-                    onChange={(e) => setShowWaterMask(e.target.checked)}
-                    style={{ cursor: "pointer" }}
-                  />
-                  <span className="mono" style={{ color: showWaterMask ? "var(--cyan)" : "var(--star-dim)", fontWeight: showWaterMask ? "bold" : "normal" }}>
-                    {showWaterMask ? "✓ FLOOD MASK ACTIVE" : "ENABLE FLOOD MASK (SAR ONLY)"}
-                  </span>
-                </label>
+              {/* Tabs for Swipe, Grad-CAM, Change map, and Uncertainty */}
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", overflowX: "auto", paddingBottom: "0.2rem" }} data-lenis-prevent>
+                {[
+                  { id: "swipe", label: "Swipe Compare" },
+                  { id: "gradcam", label: "Attention (Grad-CAM)" },
+                  { id: "change", label: "Semantic Change Map" },
+                  { id: "uncertainty", label: "Spatial Uncertainty" }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setInspectTab(tab.id)}
+                    className="mono"
+                    style={{
+                      background: inspectTab === tab.id ? "rgba(255, 77, 157, 0.15)" : "rgba(232, 236, 245, 0.03)",
+                      border: inspectTab === tab.id ? "1px solid var(--magenta)" : "1px solid rgba(232, 236, 245, 0.08)",
+                      color: inspectTab === tab.id ? "var(--magenta)" : "var(--star-dim)",
+                      fontSize: "0.7rem",
+                      padding: "0.4rem 0.8rem",
+                      cursor: "pointer",
+                      borderRadius: "4px",
+                      transition: "all 0.2s ease"
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
-              <div 
-                className="slider-wrapper" 
-                onMouseMove={handleSliderMouseMove}
-                onTouchMove={handleSliderTouchMove}
-              >
-                {/* Base Image (Retrieved match, right side) */}
-                <img 
-                  className={`slider-img ${showWaterMask && activeInspect.modality === 's1' ? 'water-mask-active' : ''}`} 
-                  src={`http://${window.location.hostname}:8000/dataset/${activeInspect.image_path}`} 
-                  onError={(e) => {
-                    e.target.src = activeInspect.modality === "s1" 
-                      ? "/satellite_radar.png"
-                      : "/satellite_optical.png";
-                  }}
-                  alt="Retrieved Match" 
-                />
-                
-                {/* Top Overlay Image (Query, left side) */}
-                <img 
-                  className={`slider-img slider-img--top ${showWaterMask && queryModality === 's1' ? 'water-mask-active' : ''}`} 
-                  src={`http://${window.location.hostname}:8000/dataset/${queryModality === 's1' ? selectedPair.s1 : selectedPair.s2}`} 
-                  onError={(e) => {
-                    e.target.src = queryModality === "s1"
-                      ? "/satellite_radar.png"
-                      : "/satellite_optical.png";
-                  }}
-                  style={{ clipPath: `polygon(0 0, ${sliderPosition}% 0, ${sliderPosition}% 100%, 0 100%)` }}
-                  alt="Query" 
-                />
-                
-                <div className="slider-handle-bar" style={{ left: `${sliderPosition}%` }}></div>
-                <div className="slider-handle-dot" style={{ left: `${sliderPosition}%` }}>
-                  ↔
-                </div>
-              </div>
+              {/* TAB 1: SWIPE COMPARE */}
+              {inspectTab === "swipe" && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem", padding: "0 0.5rem" }}>
+                    <span className="mono" style={{ fontSize: "0.75rem", color: "var(--star-dim)" }}>DISASTER WORKSPACE</span>
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.8rem" }}>
+                      <input 
+                        type="checkbox" 
+                        checked={showWaterMask}
+                        onChange={(e) => setShowWaterMask(e.target.checked)}
+                        style={{ cursor: "pointer" }}
+                      />
+                      <span className="mono" style={{ color: showWaterMask ? "var(--cyan)" : "var(--star-dim)", fontWeight: showWaterMask ? "bold" : "normal" }}>
+                        {showWaterMask ? "✓ FLOOD MASK ACTIVE" : "ENABLE FLOOD MASK (SAR ONLY)"}
+                      </span>
+                    </label>
+                  </div>
+
+                  <div 
+                    className="slider-wrapper" 
+                    onMouseMove={handleSliderMouseMove}
+                    onTouchMove={handleSliderTouchMove}
+                  >
+                    {/* Base Image (Retrieved match, right side) */}
+                    <img 
+                      className={`slider-img ${showWaterMask && activeInspect.modality === 's1' ? 'water-mask-active' : ''}`} 
+                      src={`http://${window.location.hostname}:8000/dataset/${activeInspect.image_path}`} 
+                      onError={(e) => {
+                        e.target.src = activeInspect.modality === "s1" 
+                          ? "/satellite_radar.png"
+                          : "/satellite_optical.png";
+                      }}
+                      alt="Retrieved Match" 
+                    />
+                    
+                    {/* Top Overlay Image (Query, left side) */}
+                    <img 
+                      className={`slider-img slider-img--top ${showWaterMask && queryModality === 's1' ? 'water-mask-active' : ''}`} 
+                      src={`http://${window.location.hostname}:8000/dataset/${queryModality === 's1' ? selectedPair.s1 : selectedPair.s2}`} 
+                      onError={(e) => {
+                        e.target.src = queryModality === "s1"
+                          ? "/satellite_radar.png"
+                          : "/satellite_optical.png";
+                      }}
+                      style={{ clipPath: `polygon(0 0, ${sliderPosition}% 0, ${sliderPosition}% 100%, 0 100%)` }}
+                      alt="Query" 
+                    />
+                    
+                    <div className="slider-handle-bar" style={{ left: `${sliderPosition}%` }}></div>
+                    <div className="slider-handle-dot" style={{ left: `${sliderPosition}%` }}>
+                      ↔
+                    </div>
+                  </div>
+                  
+                  <div className="compare-labels" style={{ marginTop: "0.5rem" }}>
+                    <span className="mono" style={{ color: queryModality === 's1' ? 'var(--star)' : 'var(--cyan)' }}>
+                      {queryModality === 's1' ? 'SAR Query (Sentinel-1)' : 'Optical Query (Sentinel-2)'}
+                    </span>
+                    <span className="mono" style={{ color: activeInspect.modality === 's1' ? 'var(--star)' : 'var(--cyan)' }}>
+                      {activeInspect.modality === 's1' ? 'SAR Match (Sentinel-1)' : 'Optical Match (Sentinel-2)'}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {/* TAB 2: ATTENTION HEATMAPS (GRAD-CAM) */}
+              {inspectTab === "gradcam" && (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <span className="mono" style={{ fontSize: "0.7rem", color: "var(--magenta)", display: "block", marginBottom: "0.4rem" }}>QUERY ATTENTION</span>
+                      <div style={{ border: "1px solid rgba(255, 77, 157, 0.2)", borderRadius: "6px", overflow: "hidden", aspectRatio: "1/1", background: "rgba(0,0,0,0.2)" }}>
+                        {queryGradcam ? (
+                          <img src={queryGradcam} alt="Query Attention" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div className="mono" style={{ padding: "3rem", fontSize: "0.75rem", color: "var(--star-dim)" }}>Generating Grad-CAM attention map...</div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <span className="mono" style={{ fontSize: "0.7rem", color: "var(--cyan)", display: "block", marginBottom: "0.4rem" }}>RETRIEVED MATCH ATTENTION</span>
+                      <div style={{ border: "1px solid rgba(70, 229, 255, 0.2)", borderRadius: "6px", overflow: "hidden", aspectRatio: "1/1", background: "rgba(0,0,0,0.2)" }}>
+                        {activeInspect.match_gradcam ? (
+                          <img src={activeInspect.match_gradcam} alt="Match Attention" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div className="mono" style={{ padding: "3rem", fontSize: "0.75rem", color: "var(--star-dim)" }}>Grad-CAM not available for fallback matches.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: "0.75rem", color: "var(--star-dim)", lineHeight: "1.5", margin: "0 0.5rem 0.5rem", textAlign: "center" }}>
+                    🔴 <strong>Red / Yellow zones:</strong> Areas of highest activation. Features representing corresponding structures (roads, buildings, crop rows) are aligned on the L2 pre-normalized hypersphere.
+                  </p>
+                </>
+              )}
+
+              {/* TAB 3: SEMANTIC CHANGE DETECTION MAP */}
+              {inspectTab === "change" && (
+                <>
+                  <div style={{ maxWidth: "340px", margin: "0 auto 1rem", textAlign: "center" }}>
+                    <span className="mono" style={{ fontSize: "0.7rem", color: "var(--magenta)", display: "block", marginBottom: "0.4rem" }}>SEMANTIC CHANGE MAP (CO-REGISTERED DIFF)</span>
+                    <div style={{ border: "1px solid rgba(255, 77, 157, 0.25)", borderRadius: "6px", overflow: "hidden", aspectRatio: "1/1", background: "rgba(0,0,0,0.2)" }}>
+                      {activeInspect.change_map ? (
+                        <img src={activeInspect.change_map} alt="Semantic Change Detection Map" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : (
+                        <div className="mono" style={{ padding: "5rem", fontSize: "0.75rem", color: "var(--star-dim)" }}>Change Map not available for fallback matches.</div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Legend */}
+                  <div style={{ display: "flex", justifyContent: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "0.5rem", padding: "0 0.5rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#00c3ff", display: "inline-block" }}></span>
+                      <span className="mono" style={{ color: "#00c3ff" }}>Flood / Water Change</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ff4d9d", display: "inline-block" }}></span>
+                      <span className="mono" style={{ color: "#ff4d9d" }}>Urban / Construction</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#46e582", display: "inline-block" }}></span>
+                      <span className="mono" style={{ color: "#46e582" }}>Vegetation / Forestry</span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* TAB 4: SPATIAL UNCERTAINTY */}
+              {inspectTab === "uncertainty" && (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                    <div style={{ textAlign: "center" }}>
+                      <span className="mono" style={{ fontSize: "0.7rem", color: "var(--magenta)", display: "block", marginBottom: "0.4rem" }}>QUERY UNCERTAINTY HEATMAP</span>
+                      <div style={{ border: "1px solid rgba(255, 77, 157, 0.2)", borderRadius: "6px", overflow: "hidden", aspectRatio: "1/1", background: "rgba(0,0,0,0.2)" }}>
+                        {queryUncertaintyMap ? (
+                          <img src={queryUncertaintyMap} alt="Query Uncertainty Heatmap" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div className="mono" style={{ padding: "3rem", fontSize: "0.75rem", color: "var(--star-dim)" }}>Computing MC uncertainty spatial projection...</div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <span className="mono" style={{ fontSize: "0.7rem", color: "var(--cyan)", display: "block", marginBottom: "0.4rem" }}>MATCH UNCERTAINTY HEATMAP</span>
+                      <div style={{ border: "1px solid rgba(70, 229, 255, 0.2)", borderRadius: "6px", overflow: "hidden", aspectRatio: "1/1", background: "rgba(0,0,0,0.2)" }}>
+                        {activeInspect.uncertainty_map ? (
+                          <img src={activeInspect.uncertainty_map} alt="Match Uncertainty Heatmap" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div className="mono" style={{ padding: "3rem", fontSize: "0.75rem", color: "var(--star-dim)" }}>Uncertainty map not available for fallback matches.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: "0.75rem", color: "var(--star-dim)", lineHeight: "1.5", margin: "0 0.5rem 0.5rem", textAlign: "center" }}>
+                    🔵 <strong>Low Variance</strong> (Stable) to 🔴 <strong>High Variance</strong> (Uncertain). Calculated dynamically via 10 forward passes through the projection model with active Dropout.
+                  </p>
+                </>
+              )}
               
-              <div className="compare-labels">
-                <span className="mono" style={{ color: queryModality === 's1' ? 'var(--star)' : 'var(--cyan)' }}>
-                  {queryModality === 's1' ? 'SAR Query (Sentinel-1)' : 'Optical Query (Sentinel-2)'}
-                </span>
-                <span className="mono" style={{ color: activeInspect.modality === 's1' ? 'var(--star)' : 'var(--cyan)' }}>
-                  {activeInspect.modality === 's1' ? 'SAR Match (Sentinel-1)' : 'Optical Match (Sentinel-2)'}
-                </span>
-              </div>
-              
-              <div className="compare-meta-detail">
+              <div className="compare-meta-detail" style={{ marginTop: "1rem" }}>
                 <span>Category: <strong>{activeInspect.category}</strong></span>
                 <span>Similarity: <strong>{(activeInspect.similarity * 100).toFixed(2)}%</strong></span>
                 <span>Type: <strong>{activeInspect.is_exact_match ? 'Geographic Match' : 'Semantic Match'}</strong></span>
