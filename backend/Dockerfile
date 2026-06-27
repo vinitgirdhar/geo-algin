@@ -17,5 +17,5 @@ ENV PYTHONPATH=/app
 # Expose port
 EXPOSE 8000
 
-# Run FastAPI app
-CMD ["python", "backend/main.py"]
+# Run FastAPI app in production mode (no reloader, single process)
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
