@@ -85,15 +85,20 @@ class VectorSearchIndex:
         with open(self.cache_path, "rb") as f:
             data = pickle.load(f)
             
-        self.s1_features = data["s1_features"]                  # Shape (N, 512)
-        self.s2_features = data["s2_features"]                  # Shape (N, 512)
-        self.s1_aligned_features = data["s1_aligned_features"]  # Shape (N, 512)
-        self.metadata = data["metadata"]                          # List of dictionaries
-        self.alignment_model = data["alignment_model"]          # Ridge regression model
+        s1_features = data["s1_features"]
+        s2_features = data["s2_features"]
+        s1_aligned_features = data["s1_aligned_features"]
+        self.metadata = data["metadata"]
+        self.alignment_model = data["alignment_model"]
         
-        # Pre-normalize features for fast cosine similarity dot product
-        self.s2_features_norm = self.s2_features / (np.linalg.norm(self.s2_features, axis=1, keepdims=True) + 1e-9)
-        self.s1_aligned_features_norm = self.s1_aligned_features / (np.linalg.norm(self.s1_aligned_features, axis=1, keepdims=True) + 1e-9)
+        # Pre-normalize features for fast cosine similarity dot product, cast to float16
+        self.s2_features_norm = (s2_features / (np.linalg.norm(s2_features, axis=1, keepdims=True) + 1e-9)).astype(np.float16)
+        self.s1_aligned_features_norm = (s1_aligned_features / (np.linalg.norm(s1_aligned_features, axis=1, keepdims=True) + 1e-9)).astype(np.float16)
+        
+        # Free memory immediately
+        del s1_features, s2_features, s1_aligned_features, data
+        import gc
+        gc.collect()
         
         # Build maps for filename and path lookups
         self.path_to_idx = {}
