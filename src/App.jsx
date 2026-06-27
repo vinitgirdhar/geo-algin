@@ -7,6 +7,8 @@ import SplitText from './components/SplitText.jsx';
 
 gsap.registerPlugin(ScrollTrigger);
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || `http://${window.location.hostname}:8000`;
+
 const CONFIG = {
   scrollWeight: 1.7,
   scrollEasing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
@@ -118,7 +120,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const API_BASE = `http://${window.location.hostname}:8000`;
     fetch(`${API_BASE}/api/categories`)
       .then(res => res.json())
       .then(data => {
@@ -166,7 +167,6 @@ export default function App() {
     setQueryGradcam(null);
     setQueryUncertaintyMap(null);
     
-    const API_BASE = `http://${window.location.hostname}:8000`;
     const queryImagePath = queryModality === "s1" ? selectedPair.s1 : selectedPair.s2;
     
     try {
@@ -1352,7 +1352,7 @@ export default function App() {
                         onClick={() => setSelectedPair(pair)}
                       >
                         <img
-                          src={`http://${window.location.hostname}:8000/dataset/${queryModality === "s1" ? pair.s1 : pair.s2}`}
+                          src={`${API_BASE}/dataset/${queryModality === "s1" ? pair.s1 : pair.s2}`}
                           onError={(e) => {
                             e.target.src = queryModality === "s1" 
                               ? "/satellite_radar.png" 
@@ -1424,7 +1424,7 @@ export default function App() {
                   </div>
                 )}
                 <img
-                  src={selectedPair ? `http://${window.location.hostname}:8000/dataset/${queryModality === 's1' ? selectedPair.s1 : selectedPair.s2}` : ""}
+                  src={selectedPair ? `${API_BASE}/dataset/${queryModality === 's1' ? selectedPair.s1 : selectedPair.s2}` : ""}
                   onError={(e) => {
                     e.target.src = queryModality === "s1" 
                       ? "https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/d6260a51-f244-4eb9-98f5-8c08c05cbe58_1600w.png" 
@@ -1492,7 +1492,7 @@ export default function App() {
                       <div key={`${res.image_path}-${idx}`} className="result-row">
                         <div className="result-img">
                           <img
-                            src={`http://${window.location.hostname}:8000/dataset/${res.image_path}`}
+                            src={`${API_BASE}/dataset/${res.image_path}`}
                             onError={(e) => {
                               e.target.src = res.modality === "s1"
                                 ? "https://hoirqrkdgbmvpwutwuwj.supabase.co/storage/v1/object/public/assets/assets/d6260a51-f244-4eb9-98f5-8c08c05cbe58_1600w.png"
@@ -1846,7 +1846,7 @@ export default function App() {
                     {/* Base Image (Retrieved match, right side) */}
                     <img 
                       className={`slider-img ${showWaterMask && activeInspect.modality === 's1' ? 'water-mask-active' : ''}`} 
-                      src={`http://${window.location.hostname}:8000/dataset/${activeInspect.image_path}`} 
+                      src={`${API_BASE}/dataset/${activeInspect.image_path}`} 
                       onError={(e) => {
                         e.target.src = activeInspect.modality === "s1" 
                           ? "/satellite_radar.png"
@@ -1858,7 +1858,7 @@ export default function App() {
                     {/* Top Overlay Image (Query, left side) */}
                     <img 
                       className={`slider-img slider-img--top ${showWaterMask && queryModality === 's1' ? 'water-mask-active' : ''}`} 
-                      src={`http://${window.location.hostname}:8000/dataset/${queryModality === 's1' ? selectedPair.s1 : selectedPair.s2}`} 
+                      src={`${API_BASE}/dataset/${queryModality === 's1' ? selectedPair.s1 : selectedPair.s2}`} 
                       onError={(e) => {
                         e.target.src = queryModality === "s1"
                           ? "/satellite_radar.png"

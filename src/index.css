@@ -20,9 +20,18 @@ cyan #46E5FF · starlight #E8ECF5
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html { 
-  scrollbar-width: thin; 
-  scrollbar-color: #2a2440 transparent; 
   background-color: var(--void);
+}
+
+/* Hide scrollbar globally for Chrome, Safari and Opera */
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar globally for Firefox, IE and Edge */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 html.lenis, html.lenis body { height: auto; }
