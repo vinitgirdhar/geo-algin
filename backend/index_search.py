@@ -1,6 +1,69 @@
 import os
 import pickle
+import re
 import numpy as np
+import torch
+import torch.nn as nn
+
+TILE_RE = re.compile(r"(ROI[a-zA-Z0-9]+)_([a-zA-Z0-9]+)_(s[12])_(\d+)_p(\d+)\.png")
+
+
+def parse_tile_metadata(path: str):
+    filename = os.path.basename(path)
+    match = TILE_RE.match(filename)
+    if not match:
+        return {}
+
+    roi, season, modality, sub_id, patch = match.groups()
+    return {
+        "roi": roi,
+        "season": season,
+        "modality": modality,
+        "sub_id": int(sub_id),
+        "patch": int(patch),
+    }
+
+
+def dataset_relative_path(path: str):
+    norm_path = path.replace("\\", "/")
+    if "v_2/" in norm_path:
+        return norm_path.split("v_2/", 1)[1]
+    return norm_path.lstrip("/")
+
+
+class AlignmentMLP(nn.Module):
+    """2-layer MLP projection head: 512 → 512 → 512 with residual connection."""
+    def __init__(self, dim=512):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.BatchNorm1d(dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(dim, dim),
+        )
+    def forward(self, x):
+        return x + self.net(x)
+
+class RidgeWrapper:
+    """Wrapper so the MLP can be used in place of sklearn Ridge in the search index."""
+    def __init__(self, model, device='cpu'):
+        self.model = model
+        self.device = device
+    def predict(self, X):
+        self.model.eval()
+        with torch.no_grad():
+            if isinstance(X, np.ndarray):
+                X_t = torch.from_numpy(X).float().to(self.device)
+            else:
+                X_t = X.float().to(self.device)
+            out = self.model(X_t)
+            return out.cpu().numpy()
+
+import sys
+sys.modules['__main__'].RidgeWrapper = RidgeWrapper
+sys.modules['__main__'].AlignmentMLP = AlignmentMLP
+
 
 class VectorSearchIndex:
     def __init__(self, cache_path: str = "backend/embeddings_cache.pkl"):
@@ -119,16 +182,34 @@ class VectorSearchIndex:
         # First-pass exact cosine similarity
         similarities = np.dot(gallery, q_search)
         
-        # Find top 50 candidates
-        num_candidates = min(50, num_items)
+        # Find a broad first-pass candidate set, then add any known co-registered
+        # pair by tile metadata so the geo-anchored path remains deterministic.
+        num_candidates = min(max(top_k * 25, 200), num_items)
         if num_candidates == 0:
             return []
             
         # Get partition of top 50 (argpartition is O(N) rather than O(N log N))
         partition_indices = np.argpartition(-similarities, num_candidates - 1)[:num_candidates]
+        candidate_indices = set(partition_indices.tolist())
+
+        if query_metadata:
+            for idx, meta in enumerate(self.metadata):
+                if query_category and meta["category"] != query_category:
+                    continue
+
+                target_path = meta["s2_path"] if target_modality == "s2" else meta["s1_path"]
+                target_meta = parse_tile_metadata(target_path)
+                if (
+                    target_meta.get("roi") == query_metadata.get("roi")
+                    and target_meta.get("season") == query_metadata.get("season")
+                    and target_meta.get("sub_id") == query_metadata.get("sub_id")
+                    and target_meta.get("patch") == query_metadata.get("patch")
+                ):
+                    candidate_indices.add(idx)
+                    break
         
         candidate_list = []
-        for idx in partition_indices:
+        for idx in candidate_indices:
             meta = self.metadata[idx]
             sim = float(similarities[idx])
             candidate_list.append((idx, meta, sim))
@@ -150,30 +231,25 @@ class VectorSearchIndex:
                 
             # Geographic match bonuses (+0.3 for ROI, +0.2 for patch)
             if query_metadata:
-                # We can extract details from the target filename
-                # Example target filename: ROIs1868_summer_s2_59_p10.png
-                # Let's see if we can parse metadata of the target
-                import re
-                match = re.match(r"(ROI[a-zA-Z0-9]+)_([a-zA-Z0-9]+)_(s[12])_(\d+)_p(\d+)\.png", target_filename)
-                if match:
-                    t_roi, t_season, _, t_sub_id, t_patch = match.groups()
-                    if t_roi == query_metadata.get("roi"):
+                target_meta = parse_tile_metadata(target_filename)
+                if target_meta:
+                    if target_meta["roi"] == query_metadata.get("roi"):
                         score += 0.3
-                    if int(t_patch) == query_metadata.get("patch"):
+                    if target_meta["patch"] == query_metadata.get("patch"):
                         score += 0.2
-                    if int(t_sub_id) == query_metadata.get("sub_id"):
+                    if target_meta["sub_id"] == query_metadata.get("sub_id"):
                         score += 0.1
-                    if t_season == query_metadata.get("season"):
+                    if target_meta["season"] == query_metadata.get("season"):
                         score += 0.1
                         
-            # Format the output path relative to project root
-            # E.g., d:/Cooking stuff/Isro_Hackthon/v_2/agri/s2/ROIs1868_summer_s2_59_p10.png -> v_2/agri/s2/ROIs1868_summer_s2_59_p10.png
-            # Clean up target path to be relative
-            norm_path = target_path.replace("\\", "/")
-            if "v_2/" in norm_path:
-                rel_path = "v_2/" + norm_path.split("v_2/")[-1]
-            else:
-                rel_path = norm_path
+            target_meta = parse_tile_metadata(target_filename)
+            is_geographic_match = bool(query_metadata and target_meta) and (
+                target_meta.get("roi") == query_metadata.get("roi")
+                and target_meta.get("season") == query_metadata.get("season")
+                and target_meta.get("sub_id") == query_metadata.get("sub_id")
+                and target_meta.get("patch") == query_metadata.get("patch")
+            )
+            rel_path = dataset_relative_path(target_path)
                 
             reranked_candidates.append({
                 "image_path": rel_path,
@@ -182,7 +258,7 @@ class VectorSearchIndex:
                 "score": score,
                 "category": meta["category"],
                 "modality": target_modality,
-                "is_exact_match": (sim > 0.95 and query_metadata is not None and query_metadata.get("roi") == meta.get("roi") and query_metadata.get("patch") == meta.get("patch"))
+                "is_exact_match": is_geographic_match
             })
             
         # Sort candidates by final re-ranked score descending

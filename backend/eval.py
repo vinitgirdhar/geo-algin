@@ -3,6 +3,42 @@ import pickle
 import json
 import time
 import numpy as np
+import torch
+import torch.nn as nn
+
+class AlignmentMLP(nn.Module):
+    """2-layer MLP projection head: 512 → 512 → 512 with residual connection."""
+    def __init__(self, dim=512):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim, dim),
+            nn.BatchNorm1d(dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(dim, dim),
+        )
+    def forward(self, x):
+        return x + self.net(x)
+
+class RidgeWrapper:
+    """Wrapper so the MLP can be used in place of sklearn Ridge in the search index."""
+    def __init__(self, model, device='cpu'):
+        self.model = model
+        self.device = device
+    def predict(self, X):
+        self.model.eval()
+        with torch.no_grad():
+            if isinstance(X, np.ndarray):
+                X_t = torch.from_numpy(X).float().to(self.device)
+            else:
+                X_t = X.float().to(self.device)
+            out = self.model(X_t)
+            return out.cpu().numpy()
+
+import sys
+sys.modules['__main__'].RidgeWrapper = RidgeWrapper
+sys.modules['__main__'].AlignmentMLP = AlignmentMLP
+
 
 def compute_cosine_similarity(Q, K):
     """
@@ -34,8 +70,10 @@ def evaluate_retrieval(queries, gallery, query_cats, gallery_cats, mode='cross')
 
     cat_p_at_5 = []
     cat_r_at_5 = []
+    cat_hit_at_5 = []
     cat_p_at_10 = []
     cat_r_at_10 = []
+    cat_hit_at_10 = []
     cat_ap = []
 
     for i in range(num_queries):
@@ -75,12 +113,14 @@ def evaluate_retrieval(queries, gallery, query_cats, gallery_cats, mode='cross')
         r_5 = hits_at_5 / n_relevant if n_relevant > 0 else 0.0
         cat_p_at_5.append(p_5)
         cat_r_at_5.append(r_5)
+        cat_hit_at_5.append(1.0 if hits_at_5 > 0 else 0.0)
 
         # Precision and Recall at 10
         p_10 = hits_at_10 / 10.0
         r_10 = hits_at_10 / n_relevant if n_relevant > 0 else 0.0
         cat_p_at_10.append(p_10)
         cat_r_at_10.append(r_10)
+        cat_hit_at_10.append(1.0 if hits_at_10 > 0 else 0.0)
 
         # Average Precision (AP) for category-level
         # AP = sum(Precision@j * relevance[j]) / n_relevant
@@ -120,6 +160,12 @@ def evaluate_retrieval(queries, gallery, query_cats, gallery_cats, mode='cross')
         'category': {
             'f1_at_5': float(cat_f1_5),
             'f1_at_10': float(cat_f1_10),
+            'precision_at_5': float(avg_p_5),
+            'precision_at_10': float(avg_p_10),
+            'recall_at_5': float(avg_r_5),
+            'recall_at_10': float(avg_r_10),
+            'hit_rate_at_5': float(np.mean(cat_hit_at_5)),
+            'hit_rate_at_10': float(np.mean(cat_hit_at_10)),
             'map': float(np.mean(cat_ap))
         }
     }

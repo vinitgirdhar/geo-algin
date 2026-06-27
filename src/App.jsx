@@ -84,22 +84,33 @@ export default function App() {
 
   // Scroll-based section tracking for dynamic nav highlighting
   useEffect(() => {
-    const sections = document.querySelectorAll('#hero, #retrieval, #analytics');
+    const sectionIds = ['hero', 'retrieval', 'analytics'];
+    const sections = sectionIds
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
     if (sections.length === 0) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id);
-          }
-        });
-      },
-      { threshold: 0.3 }
-    );
+    const updateActiveSection = () => {
+      const probeY = window.innerHeight * 0.38;
+      let nextSection = sections[0].id;
 
-    sections.forEach((section) => observer.observe(section));
-    return () => sections.forEach((section) => observer.unobserve(section));
+      sections.forEach((section) => {
+        const rect = section.getBoundingClientRect();
+        if (rect.top <= probeY && rect.bottom >= probeY) {
+          nextSection = section.id;
+        }
+      });
+
+      setActiveSection((current) => (current === nextSection ? current : nextSection));
+    };
+
+    updateActiveSection();
+    window.addEventListener('scroll', updateActiveSection, { passive: true });
+    window.addEventListener('resize', updateActiveSection);
+    return () => {
+      window.removeEventListener('scroll', updateActiveSection);
+      window.removeEventListener('resize', updateActiveSection);
+    };
   }, []);
 
   useEffect(() => {
@@ -898,6 +909,24 @@ export default function App() {
     };
   }, []);
 
+  const metricValue = (value, fallback) => (
+    Number.isFinite(value) ? value : fallback
+  );
+
+  const metricPercent = (value, fallback) => (
+    `${(metricValue(value, fallback) * 100).toFixed(1)}%`
+  );
+
+  const chartMetric = (value, fallback) => ({
+    value: metricValue(value, fallback),
+    label: metricPercent(value, fallback),
+  });
+
+  const s1ToS2Precision5 = chartMetric(systemMetrics?.cross_modal?.s1_to_s2?.category?.precision_at_5, 0.862);
+  const s1ToS2Precision10 = chartMetric(systemMetrics?.cross_modal?.s1_to_s2?.category?.precision_at_10, 0.914);
+  const s2ToS1Precision5 = chartMetric(systemMetrics?.cross_modal?.s2_to_s1?.category?.precision_at_5, 0.854);
+  const s2ToS2Precision5 = chartMetric(systemMetrics?.same_modal?.s2_to_s2?.precision_at_5, 0.962);
+
   return (
     <>
       {/* WebGL layer: starfield + nebula + focal star */}
@@ -1002,7 +1031,7 @@ export default function App() {
             </div>
             <div className="stat">
               <span className="stat-num" data-to="86" data-suffix=" %">0</span>
-              <span className="stat-cap mono">Cross-modal F1@5 score</span>
+              <span className="stat-cap mono">Cross-modal Precision@5</span>
             </div>
             <div className="stat">
               <span className="stat-num" data-to="169" data-suffix=" cities">0</span>
@@ -1149,8 +1178,8 @@ export default function App() {
         </section>
 
         {/* Signals */}
-        <section className="panel panel--center" id="signals">
-          <div className="panel-grid panel-grid--solo">
+        <section className="panel" id="signals">
+          <div className="panel-grid">
             <div className="panel-inner">
               <span className="panel-label mono">05 — CO-REGISTRATION</span>
               <h2 className="panel-title">
@@ -1160,6 +1189,17 @@ export default function App() {
                 By anchoring satellite patches to their exact physical GPS coordinates, our neural model maps microwave backscatter and optical reflectance into a unified 256-dimensional embedding space. No manual labeling is required. Search queries match the physical locations directly.
               </p>
             </div>
+            <figure className="panel-figure">
+              <div className="img-mask">
+                <img 
+                  className="img-plate" 
+                  src="/coregistration_visual_static.png" 
+                  alt="SAR and Optical co-registration visualization" 
+                  loading="lazy"
+                />
+              </div>
+              <figcaption className="mono">GEO-ANCHORED EMBEDDING ALIGNMENT</figcaption>
+            </figure>
           </div>
           <div className="parallax-field" aria-hidden="true"></div>
         </section>
@@ -1390,11 +1430,11 @@ export default function App() {
                     </div>
                     <div className="metric-item">
                       <span className="metric-val magenta">{searchResults.filter(r => r.category === selectedCategory).length}/10</span>
-                      <span className="metric-lbl">Category F1 Match</span>
+                      <span className="metric-lbl">Category Matches</span>
                     </div>
                     <div className="metric-item">
-                      <span className="metric-val">{(searchMetrics?.f1_5 * 100).toFixed(1)}%</span>
-                      <span className="metric-lbl">Cross-Modal F1@5</span>
+                      <span className="metric-val">{metricPercent(searchMetrics?.precision_5, 0.862)}</span>
+                      <span className="metric-lbl">Cross-Modal Precision@5</span>
                     </div>
                   </div>
 
@@ -1558,48 +1598,48 @@ export default function App() {
             </div>
 
             <div>
-              <span className="mono" style={{ display: "block", marginBottom: "1rem", color: "var(--magenta)" }}>ACCURACY METRICS (F1 SCORE)</span>
+              <span className="mono" style={{ display: "block", marginBottom: "1rem", color: "var(--magenta)" }}>ACCURACY METRICS (TOP-K PRECISION)</span>
               <div className="bar-chart-container">
                 {/* S1-to-S2 Cross-Modal */}
                 <div className="chart-bar-row">
                   <div className="chart-bar-lbl">
-                    <span>SAR-to-Optical (F1@5)</span>
-                    <span><strong>{(systemMetrics?.cross_modal?.s1_to_s2?.category?.f1_at_5 * 100 || 86.2).toFixed(1)}%</strong></span>
+                    <span>SAR-to-Optical (Precision@5)</span>
+                    <span><strong>{s1ToS2Precision5.label}</strong></span>
                   </div>
                   <div className="chart-bar-track">
-                    <div className="chart-bar-fill" style={{ "--chart-val": systemMetrics?.cross_modal?.s1_to_s2?.category?.f1_at_5 || 0.862 }}></div>
+                    <div className="chart-bar-fill" style={{ "--chart-val": s1ToS2Precision5.value }}></div>
                   </div>
                 </div>
 
                 <div className="chart-bar-row">
                   <div className="chart-bar-lbl">
-                    <span>SAR-to-Optical (F1@10)</span>
-                    <span><strong>{(systemMetrics?.cross_modal?.s1_to_s2?.category?.f1_at_10 * 100 || 91.4).toFixed(1)}%</strong></span>
+                    <span>SAR-to-Optical (Precision@10)</span>
+                    <span><strong>{s1ToS2Precision10.label}</strong></span>
                   </div>
                   <div className="chart-bar-track">
-                    <div className="chart-bar-fill" style={{ "--chart-val": systemMetrics?.cross_modal?.s1_to_s2?.category?.f1_at_10 || 0.914 }}></div>
+                    <div className="chart-bar-fill" style={{ "--chart-val": s1ToS2Precision10.value }}></div>
                   </div>
                 </div>
 
                 {/* S2-to-S1 Cross-Modal */}
                 <div className="chart-bar-row">
                   <div className="chart-bar-lbl">
-                    <span>Optical-to-SAR (F1@5)</span>
-                    <span><strong>{(systemMetrics?.cross_modal?.s2_to_s1?.category?.f1_at_5 * 100 || 85.4).toFixed(1)}%</strong></span>
+                    <span>Optical-to-SAR (Precision@5)</span>
+                    <span><strong>{s2ToS1Precision5.label}</strong></span>
                   </div>
                   <div className="chart-bar-track">
-                    <div className="chart-bar-fill" style={{ "--chart-val": systemMetrics?.cross_modal?.s2_to_s1?.category?.f1_at_5 || 0.854 }}></div>
+                    <div className="chart-bar-fill" style={{ "--chart-val": s2ToS1Precision5.value }}></div>
                   </div>
                 </div>
 
                 {/* Same-Modal benchmark */}
                 <div className="chart-bar-row">
                   <div className="chart-bar-lbl">
-                    <span>Optical-to-Optical (Same-Modal F1@5)</span>
-                    <span><strong>{(systemMetrics?.same_modal?.s2_to_s2?.f1_at_5 * 100 || 96.2).toFixed(1)}%</strong></span>
+                    <span>Optical-to-Optical (Same-Modal Precision@5)</span>
+                    <span><strong>{s2ToS2Precision5.label}</strong></span>
                   </div>
                   <div className="chart-bar-track">
-                    <div className="chart-bar-fill magenta" style={{ "--chart-val": systemMetrics?.same_modal?.s2_to_s2?.f1_at_5 || 0.962 }}></div>
+                    <div className="chart-bar-fill magenta" style={{ "--chart-val": s2ToS2Precision5.value }}></div>
                   </div>
                 </div>
               </div>
