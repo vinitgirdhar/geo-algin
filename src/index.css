@@ -116,10 +116,17 @@ main { position: relative; z-index: 2; }
   right: 0;
   z-index: 10;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   padding: 2rem 6vw;
   mix-blend-mode: difference;
+  pointer-events: auto;
+  width: 100%;
+}
+
+.site-nav {
+  display: flex;
+  gap: 2rem;
 }
 
 .logo {
@@ -1322,21 +1329,62 @@ body.has-cursor .progress, body:not(.loading) .progress { opacity: 1; transition
   .site-head {
     padding: 1rem 4vw !important;
     gap: 0.5rem !important;
-    flex-wrap: wrap;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+
+  .logo {
+    width: 100%;
+    text-align: center;
+    font-size: 0.85rem;
   }
 
   .site-nav {
     gap: 0.6rem !important;
-    order: 3;
     width: 100%;
-    justify-content: center;
-    padding-top: 0.4rem;
+    justify-content: center !important;
+    padding-top: 0.2rem;
   }
 
   .site-nav button {
     font-size: 0.55rem !important;
     padding: 0.35rem 0.6rem !important;
     letter-spacing: 0.12em !important;
+  }
+
+  /* Hero: scale title to fit screen, allow wrapping */
+  .hero-title {
+    font-size: clamp(2.2rem, 11vw, 5rem) !important;
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    letter-spacing: 0.02em;
+    padding: 0 2vw;
+  }
+
+  .hero-inner {
+    padding: 0 5vw;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 4rem;
+  }
+
+  .hero-sub {
+    font-size: 0.55rem !important;
+    letter-spacing: 0.18em !important;
+    max-width: 90vw;
+    margin-top: 1.4rem !important;
+  }
+
+  .scroll-cue {
+    bottom: 3vh;
+    font-size: 0.5rem;
+  }
+
+  .scroll-cue span:first-child {
+    max-width: 70vw;
   }
 
   /* Studio section */

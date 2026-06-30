@@ -989,11 +989,11 @@ export default function App() {
       </div>
 
       {/* Header */}
-      <header className="site-head" style={{ mixBlendMode: 'difference', pointerEvents: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+      <header className="site-head">
         <div className="logo">GEO-ALIGN</div>
-        
+
         {/* Navigation buttons */}
-        <nav className="site-nav" style={{ display: 'flex', gap: '2rem' }}>
+        <nav className="site-nav">
           {[
             { id: 'hero', label: 'Home', duration: 1.5 },
             { id: 'retrieval', label: 'Retrieval Core', duration: 2.0 },
