@@ -1316,6 +1316,297 @@ body.has-cursor .progress, body:not(.loading) .progress { opacity: 1; transition
   }
 }
 
+/* ========== Mobile responsiveness ========== */
+@media (max-width: 768px) {
+  /* Header: compact nav, hide long meta */
+  .site-head {
+    padding: 1rem 4vw !important;
+    gap: 0.5rem !important;
+    flex-wrap: wrap;
+  }
+
+  .site-nav {
+    gap: 0.6rem !important;
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    padding-top: 0.4rem;
+  }
+
+  .site-nav button {
+    font-size: 0.55rem !important;
+    padding: 0.35rem 0.6rem !important;
+    letter-spacing: 0.12em !important;
+  }
+
+  /* Studio section */
+  .studio {
+    padding: 8vh 4vw;
+    min-height: auto;
+  }
+
+  .glass-panel {
+    padding: 1.2rem;
+  }
+
+  .studio-header h2 {
+    font-size: 1.5rem !important;
+  }
+
+  /* Category tabs: scroll horizontally */
+  .category-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.3rem;
+    padding-bottom: 0.6rem;
+  }
+
+  .category-tab {
+    flex-shrink: 0;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.58rem;
+  }
+
+  /* Sample grid: 3 columns on mobile */
+  .sample-grid {
+    grid-template-columns: repeat(3, 1fr);
+    max-height: 180px;
+  }
+
+  /* Input mode toggle */
+  .input-mode-toggle {
+    gap: 0.8rem !important;
+  }
+
+  /* GPS grid stacks on mobile */
+  .gps-input-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.8rem !important;
+  }
+
+  /* Modality selector */
+  .modality-selector {
+    gap: 0.6rem;
+  }
+
+  .modality-btn {
+    padding: 0.7rem 0.5rem;
+  }
+
+  .modality-btn-title {
+    font-size: 0.75rem;
+  }
+
+  /* Search button */
+  .btn-search {
+    font-size: 0.75rem;
+    padding: 0.9rem;
+    letter-spacing: 0.12em;
+  }
+
+  /* Results panel */
+  .results-header-metrics {
+    flex-direction: column;
+    gap: 0.8rem;
+    align-items: flex-start;
+    padding: 0.8rem 1rem;
+  }
+
+  .metric-item {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .result-row {
+    grid-template-columns: 56px 1fr;
+    gap: 0.8rem;
+  }
+
+  .result-action {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    text-align: left;
+  }
+
+  .result-meta-row {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .result-title {
+    font-size: 0.72rem;
+  }
+
+  .results-scroll-container {
+    max-height: 400px;
+  }
+
+  /* Compare modal: full screen */
+  .compare-modal {
+    padding: 0;
+  }
+
+  .compare-box {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .compare-head {
+    padding: 0.8rem 1rem;
+    flex-shrink: 0;
+  }
+
+  .compare-title {
+    font-size: 0.9rem;
+  }
+
+  .compare-body {
+    padding: 1rem;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  /* Modal tabs: horizontally scrollable */
+  .inspect-tabs {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.4rem !important;
+  }
+
+  .inspect-tabs button {
+    flex-shrink: 0;
+    font-size: 0.6rem !important;
+    padding: 0.35rem 0.6rem !important;
+    white-space: nowrap;
+  }
+
+  /* Grad-CAM / Uncertainty 2-column grids in modal */
+  .inspect-image-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.8rem !important;
+  }
+
+  .compare-meta-detail {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .compare-labels {
+    font-size: 0.6rem;
+  }
+
+  /* Analytics section */
+  .analytics-section {
+    padding: 8vh 4vw;
+  }
+
+  .analytics-telemetry-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.8rem !important;
+  }
+
+  /* Explainer console */
+  .explainer-console {
+    min-height: auto !important;
+  }
+
+  .explainer-console-footer {
+    flex-direction: column !important;
+    gap: 0.3rem !important;
+  }
+
+  /* Developer console code blocks */
+  .dev-console pre {
+    font-size: 0.65rem;
+    word-break: break-all;
+  }
+
+  /* Disaster workspace header */
+  .disaster-workspace-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Change map legend */
+  .change-map-legend {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Footer */
+  .footer {
+    min-height: 60vh;
+    padding: 8vh 4vw;
+  }
+
+  .footer-title {
+    font-size: clamp(2rem, 8vw, 4rem);
+  }
+
+  .magnetic-btn {
+    font-size: 0.8rem;
+    padding: 1rem 2rem;
+  }
+
+  /* Log rows already handled but refine */
+  .log { padding: 10vh 4vw; }
+  .stats { padding: 10vh 4vw; }
+
+  /* Arrival text */
+  .arrival-line {
+    max-width: 90vw;
+    font-size: clamp(1.1rem, 4.5vw, 1.8rem);
+  }
+}
+
+/* Extra small screens (< 400px) */
+@media (max-width: 400px) {
+  .site-nav button {
+    font-size: 0.5rem !important;
+    padding: 0.3rem 0.4rem !important;
+  }
+
+  .sample-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .result-row {
+    grid-template-columns: 1fr;
+  }
+
+  .result-img {
+    max-width: 80px;
+  }
+
+  .category-tab {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.52rem;
+  }
+
+  .glass-panel {
+    padding: 0.8rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 4vh;
+  }
+}
+
 /* Disaster Assessment Water Body Extraction Filter */
 .water-mask-active {
   filter: contrast(180%) brightness(1.2) hue-rotate(180deg) saturate(2.5) sepia(0.3) !important;

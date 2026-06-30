@@ -993,7 +993,7 @@ export default function App() {
         <div className="logo">GEO-ALIGN</div>
         
         {/* Navigation buttons */}
-        <nav style={{ display: 'flex', gap: '2rem' }}>
+        <nav className="site-nav" style={{ display: 'flex', gap: '2rem' }}>
           {[
             { id: 'hero', label: 'Home', duration: 1.5 },
             { id: 'retrieval', label: 'Retrieval Core', duration: 2.0 },
@@ -1307,7 +1307,7 @@ export default function App() {
               </div>
 
               {/* Selector Mode Toggle */}
-              <div style={{ display: "flex", gap: "1.5rem", marginBottom: "1rem", borderBottom: "1px solid rgba(232, 236, 245, 0.1)", paddingBottom: "0.5rem" }}>
+              <div className="input-mode-toggle" style={{ display: "flex", gap: "1.5rem", marginBottom: "1rem", borderBottom: "1px solid rgba(232, 236, 245, 0.1)", paddingBottom: "0.5rem" }}>
                 <button
                   onClick={() => setInputMode("db")}
                   className="mono"
@@ -1369,7 +1369,7 @@ export default function App() {
                   <p className="mono" style={{ marginBottom: "1rem", fontSize: "0.8rem", color: "var(--star-dim)", lineHeight: "1.4" }}>
                     Geo-Anchored Core Search: Enter physical GPS coordinates to locate the corresponding grid tile.
                   </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.2rem" }}>
+                  <div className="gps-input-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.2rem" }}>
                     <div>
                       <label className="mono" style={{ display: "block", fontSize: "0.7rem", color: "var(--star-dim)", marginBottom: "0.3rem" }}>Latitude (Decimal)</label>
                       <input 
@@ -1650,7 +1650,7 @@ export default function App() {
                 Real-time validation metrics of our cross-modal representation. Same-modal retrieval represents same-sensor searches, while cross-modal represents mapping Sentinel-1 (SAR) queries directly into the Sentinel-2 (Optical) space.
               </p>
 
-              <div style={{ marginTop: "2rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+              <div className="analytics-telemetry-grid" style={{ marginTop: "2rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
                 <div style={{ background: "rgba(232, 236, 245, 0.02)", padding: "1.2rem", borderRadius: "6px", border: "1px solid rgba(232, 236, 245, 0.05)" }}>
                   <span className="mono" style={{ display: "block", marginBottom: "0.5rem" }}>Vector Matcher</span>
                   <strong style={{ fontSize: "1.2rem", color: "var(--cyan)" }}>NumPy Exact</strong>
@@ -1732,7 +1732,7 @@ export default function App() {
               </div>
 
               {/* Dynamic Explainer Console */}
-              <div style={{ padding: "1.2rem", background: "rgba(5, 5, 7, 0.8)", border: "1px solid rgba(255, 77, 157, 0.2)", borderRadius: "6px", minHeight: "200px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div className="explainer-console" style={{ padding: "1.2rem", background: "rgba(5, 5, 7, 0.8)", border: "1px solid rgba(255, 77, 157, 0.2)", borderRadius: "6px", minHeight: "200px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
                 <div>
                   <span className="mono" style={{ fontSize: "0.7rem", color: "var(--magenta)", display: "block", marginBottom: "0.4rem", letterSpacing: "0.1em" }}>
                     {exp.title.toUpperCase()}
@@ -1747,7 +1747,7 @@ export default function App() {
                     {exp.desc}
                   </p>
                 </div>
-                <div className="mono" style={{ fontSize: "0.65rem", color: "var(--cyan)", marginTop: "0.8rem", borderTop: "1px solid rgba(232, 236, 245, 0.05)", paddingTop: "0.4rem", display: "flex", justifyContent: "space-between" }}>
+                <div className="explainer-console-footer mono" style={{ fontSize: "0.65rem", color: "var(--cyan)", marginTop: "0.8rem", borderTop: "1px solid rgba(232, 236, 245, 0.05)", paddingTop: "0.4rem", display: "flex", justifyContent: "space-between" }}>
                   <span>✓ 16,000 GEO-COREGISTRATION PAIRS</span>
                   <span>CPU ADAPTATION ACTIVE</span>
                 </div>
@@ -1793,7 +1793,7 @@ export default function App() {
             </div>
             <div className="compare-body">
               {/* Tabs for Swipe, Grad-CAM, Change map, and Uncertainty */}
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", overflowX: "auto", paddingBottom: "0.2rem" }} data-lenis-prevent>
+              <div className="inspect-tabs" style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", overflowX: "auto", paddingBottom: "0.2rem" }} data-lenis-prevent>
                 {[
                   { id: "swipe", label: "Swipe Compare" },
                   { id: "gradcam", label: "Attention (Grad-CAM)" },
@@ -1823,7 +1823,7 @@ export default function App() {
               {/* TAB 1: SWIPE COMPARE */}
               {inspectTab === "swipe" && (
                 <>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem", padding: "0 0.5rem" }}>
+                  <div className="disaster-workspace-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem", padding: "0 0.5rem" }}>
                     <span className="mono" style={{ fontSize: "0.75rem", color: "var(--star-dim)" }}>DISASTER WORKSPACE</span>
                     <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontSize: "0.8rem" }}>
                       <input 
@@ -1888,7 +1888,7 @@ export default function App() {
               {/* TAB 2: ATTENTION HEATMAPS (GRAD-CAM) */}
               {inspectTab === "gradcam" && (
                 <>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                  <div className="inspect-image-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
                     <div style={{ textAlign: "center" }}>
                       <span className="mono" style={{ fontSize: "0.7rem", color: "var(--magenta)", display: "block", marginBottom: "0.4rem" }}>QUERY ATTENTION</span>
                       <div style={{ border: "1px solid rgba(255, 77, 157, 0.2)", borderRadius: "6px", overflow: "hidden", aspectRatio: "1/1", background: "rgba(0,0,0,0.2)" }}>
@@ -1931,7 +1931,7 @@ export default function App() {
                   </div>
                   
                   {/* Legend */}
-                  <div style={{ display: "flex", justifyContent: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "0.5rem", padding: "0 0.5rem" }}>
+                  <div className="change-map-legend" style={{ display: "flex", justifyContent: "center", gap: "1rem", flexWrap: "wrap", marginBottom: "0.5rem", padding: "0 0.5rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.75rem" }}>
                       <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#00c3ff", display: "inline-block" }}></span>
                       <span className="mono" style={{ color: "#00c3ff" }}>Flood / Water Change</span>
@@ -1951,7 +1951,7 @@ export default function App() {
               {/* TAB 4: SPATIAL UNCERTAINTY */}
               {inspectTab === "uncertainty" && (
                 <>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                  <div className="inspect-image-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
                     <div style={{ textAlign: "center" }}>
                       <span className="mono" style={{ fontSize: "0.7rem", color: "var(--magenta)", display: "block", marginBottom: "0.4rem" }}>QUERY UNCERTAINTY HEATMAP</span>
                       <div style={{ border: "1px solid rgba(255, 77, 157, 0.2)", borderRadius: "6px", overflow: "hidden", aspectRatio: "1/1", background: "rgba(0,0,0,0.2)" }}>
